@@ -110,6 +110,6 @@ Citation
 Contact
 -------
 
-Authors: Brad Balderson, Michael Lorenzini, Aaron Ho
+Authors: Brad Balderson, Michael Lorenzini, Aaron Ho, Graham McVicker
 
 Contact:  bbalderson@salk.edu
