@@ -3,7 +3,8 @@ Sheriff
 ## Identification of CRISPR/cas9 edit sites in single cells
 <img src="https://github.com/BradBalderson/Sheriff/blob/main/img/sheriff.png" alt="Sheriff Badge" width="600">
 
-**Sheriff process aligned Superb-seq data to call edit sites and quantify gene expression in single cells** 
+**Sheriff processes aligned Superb-seq data to call edit sites and quantify gene expression in single cells** 
+
 The inputted bam must be the annotated bam file from split-pipe.
 
 Install
