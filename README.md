@@ -19,9 +19,6 @@ To install from source:
 
 Usage
 -----
-
-In the command line, type in **'simplenexuscaller -h '** for detailed usage.
-
     $ sheriff ---help
      Usage: sheriff [OPTIONS] BAM_FILE REF_FILE BARCODE_FILE GTF_FILE
 
