@@ -1,9 +1,9 @@
-Sheriff - Identification of CRISPR/cas9 edit sites in Superb-seq data
+Sheriff - Identification of CRISPR/cas9 edit sites in single cells
 ==================
-![title](https://github.com/BradBalderson/Cytocipher/blob/main/img/example_heatmap.png?raw=true)
+![title](https://github.com/BradBalderson/Sheriff/blob/main/img/sheriff.png)
 
 **Sheriff process aligned Superb-seq data to call edit sites and quantify gene expression in single cells** 
-Annotated bam file from split-pipe currently the only supported input format.
+The inputted bam must be the annotated bam file from split-pipe.
 
 Install
 -------
