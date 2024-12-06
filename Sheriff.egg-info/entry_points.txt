@@ -1,0 +1,3 @@
+[console_scripts]
+Sheriff = sheriff.__main__:main
+sheriff = sheriff.__main__:main

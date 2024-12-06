@@ -1,0 +1,17 @@
+
+mamba create -n sheriff_env python=3.10
+conda activate sheriff_env
+
+python3 setup.py install
+
+mamba install typing_extensions
+mamba install typer
+mamba install polars
+mamba install bioconda::pyranges
+mamba install faiss
+mamba install bioconda::gtfparse
+mamba install bioconda::pysam
+
+
+
+
