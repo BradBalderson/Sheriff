@@ -1,5 +1,8 @@
-Sheriff - Identification of CRISPR/cas9 edit sites in single cells
+Sheriff 
 ==================
+## Identification of CRISPR/cas9 edit sites in single cells
+<img src="https://github.com/BradBalderson/Sheriff/blob/main/img/sheriff.png" alt="Sheriff Badge" width="400">
+
 ![title](https://github.com/BradBalderson/Sheriff/blob/main/img/sheriff.png)
 
 **Sheriff process aligned Superb-seq data to call edit sites and quantify gene expression in single cells** 
