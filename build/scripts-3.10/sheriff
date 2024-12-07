@@ -1,9 +1,0 @@
-#!/Users/bradbalderson/miniforge3/envs/sheriff_env/bin/python3
-import sys
-
-if sys.version_info.major <= 2:
-    raise ValueError( "SimpleNexusCaller requires python version 3 or higher" )
-
-import sheriff.count_t7 as count_t7
-
-count_t7.main()
