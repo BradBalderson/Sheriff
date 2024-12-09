@@ -106,7 +106,33 @@ Output
 
 Output files include:
 
-- **output_prefix.bed**: The called edit sites locations.
+- **edit_site_info.txt**: Has the edit site information, name, location, window size, and overlapping genes.
+- **edit_site.bed**: Bed file of the edit site locations.
+- **t7_barcode_edits.tsv**: Particular edit events, with detail on which canonical-edit-site the edit belongs to,
+                            and the ref and alt sequence at the particular edit site.
+- **cell_allelic_dosage.canonical-edit-sites.parquet.gz**: (cell X edit-site) matrix of counts, for called allelic edits.
+- **cell_allelic_dosage.canonical-edit-sites.gene-collapsed.parquet.gz**: (cell X edit-site OR edit-gene) matrix of allelic edits, but collapse to the gene level for edit-sites that intersect genes.
+- **cell_gene_mrna_counts.parquet.gz**: (cell X gene) The UMI counts per gene, excluding confounding T7 reads.
+- **t7_barcoded_counts.parquet.gz**: (cell X edit-site) matrix with number of t7 barcoded UMIs per cell.
+- **t7_nonbarcoded_counts.parquet.gz**: (cell X edit-site) matrix with number of UMIs per cell for reads that were +/- some distance from canonical edit sites, and were subsequently filtered from gene counting.
+- **t7_all_counts.parquet.gz**: (cell X edit-site) matrix of all T7 related UMIs, addition of both t7_barcoded_counts.parquet.gz AND t7_nonbarcoded_counts.parquet.gz.
+
+#### Below are just for sanity checking / visualisation, but less important for downstream analysis
+- **t7_reads.txt**: List of call t7 read names in bam.
+- **t7_barcoded_reads.txt**: List of t7 barcoded reads in bam.
+- **t7_non-barcoded_reads.txt**: List of t7 non-barcoded reads in bam.
+- **t7_filt.bam**: Bam file containing only the mRNA reads, i.e. removes reads +/- a certain bp range from the canonical edit sites.
+- **t7_only.bam**: Bam file containing only the t7 reads, which includes barcoded reads as well as some reads that could potentially be t7 reads.
+- **t7_non-barcoded_only.bam**: Bam containing all reads that were within some +/- bp distance from canonical edit sites, potential non-barcoded T7 reads.
+- **t7_barcoded_only.bam**: Bam file containing only the BARCODED t7 reads, called be the kmer match in the 5' soft-clip.
+
+Reading output
+------
+***NOTE*** for the parquet.gz files, these can be rapidly read with pandas in Python:
+
+    import pandas as pd
+
+    cell_by_gene_edit_dosage = pd.read_parquet("example_data/cell_allelic_dosage.canonical-edit-sites.gene-collapsed.parquet.gz")
 
 Citation
 --------
