@@ -1,5 +1,14 @@
+.DS_Store
+example_data/Homo_sapiens.GRCh38.110.gtf
+example_data/Homo_sapiens.GRCh38.dna.primary_assembly.fa
+example_data/Homo_sapiens.GRCh38.dna.primary_assembly.fa.fai
+!example_data/barcode_headAligned_anno.sorted.edit_regions_200kb.bam
+!example_data/barcode_headAligned_anno.sorted.edit_regions_200kb.bam.bai
+!example_data/barcode_whitelist.500-cell.txt
+!example_data/K562_CNV_hg19.tsv
+!example_data/black_100x_peaks_by_qval.simple_repeats_50N.EXTRA.bed
+!example_dadta/blacklist_seqs.txt
 subset_500_cell_sheriff_output/
-example_data/
 build/
 dist/
 Sheriff.egg-info/

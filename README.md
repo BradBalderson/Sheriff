@@ -9,7 +9,7 @@ The inputted bam must be the annotated bam file from split-pipe.
 
 Install
 -------
-Please replace 'conda' with 'mamba' if installed, will be much faster (recommend installing mamba!).
+Please replace 'mamba' with 'conda' if not installed, mamba much faster however (recommend installing mamba!).
 
 To install from source:
 
@@ -21,11 +21,12 @@ To install from source:
 
     python3 setup.py install
 
-    mamba install typing_extensions, typer, polars, bioconda::pyranges, faiss, bioconda::gtfparse, bioconda::pysam
+    mamba install typing_extensions typer polars bioconda::pyranges faiss bioconda::gtfparse bioconda::pysam conda-forge::biopython
+    pip install gtfparse==2.5.0
 
 Usage
 -----
-    sheriff ---help
+    sheriff --help
 
      Usage: sheriff [OPTIONS] BAM_FILE REF_FILE BARCODE_FILE GTF_FILE
     

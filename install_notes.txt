@@ -4,8 +4,18 @@ conda activate sheriff_env
 
 python3 setup.py install
 
-mamba install typing_extensions, typer, polars, bioconda::pyranges, faiss, bioconda::gtfparse, bioconda::pysam
+mamba install typing_extensions
+mamba install typer
+mamba install polars
+mamba install bioconda::pyranges
+mamba install faiss
+mamba install bioconda::gtfparse
+mamba install bioconda::pysam
+mamba install conda-forge::biopython
 
-conda env create -f sheriff_env.yml
+pip install gtfparse==2.5.0
 
+## Now moving necessary data for testing
+
+cp /Users/bradbalderson/Desktop/projects/myPython/Sheriff/example_data/blacklist_seqs.txt .
 
