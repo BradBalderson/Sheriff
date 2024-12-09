@@ -9,16 +9,19 @@ The inputted bam must be the annotated bam file from split-pipe.
 
 Install
 -------
+Please replace 'conda' with 'mamba' if installed, will be much faster (recommend installing mamba!).
 
-- [Python3.x](https://www.python.org/getit/) with the following packages:
-- Numpy
-- Pandas
-    
 To install from source:
 
     git clone https://github.com/BradBalderson/Sheriff.git
     cd Sheriff
+
+    conda create -n sheriff_env python=3.10
+    conda activate sheriff_env
+
     python3 setup.py install
+
+    mamba install typing_extensions, typer, polars, bioconda::pyranges, faiss, bioconda::gtfparse, bioconda::pysam
 
 Usage
 -----

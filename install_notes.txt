@@ -4,14 +4,8 @@ conda activate sheriff_env
 
 python3 setup.py install
 
-mamba install typing_extensions
-mamba install typer
-mamba install polars
-mamba install bioconda::pyranges
-mamba install faiss
-mamba install bioconda::gtfparse
-mamba install bioconda::pysam
+mamba install typing_extensions, typer, polars, bioconda::pyranges, faiss, bioconda::gtfparse, bioconda::pysam
 
-
+conda env create -f sheriff_env.yml
 
 
