@@ -501,7 +501,7 @@ def run_count_t7(bam_file,
                  ref_file,
                  barcode_file,
                  gtf_file=None, # GTF file to call allelic edits per gene
-                 t7_barcode=None,
+                 t7_barcode="GGGAGAGTAT",
                  blacklist_file=None, # bed file specifying regions to exclude as potential edit sites, generally sites of high endogenuous t7 expression.
                  whitelist_file=None,
                  k=6,
@@ -528,11 +528,6 @@ def run_count_t7(bam_file,
     
     out_path = Path(outdir)
     out_path.mkdir(parents=True, exist_ok=True) # Create dir before making output files
-    
-    # Process t7_barcode, maybe accept multiple later
-    if t7_barcode is None:
-        t7_barcode = 'GGGAGAGTAT'
-
 
     # Load whitelisted barcodes
     with open(barcode_file) as file:

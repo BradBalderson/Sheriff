@@ -17,21 +17,18 @@ def get_t7_edits(
     bam_file: Annotated[str, typer.Argument(help="BAM file")],
     ref_file: Annotated[str, typer.Argument(help="Fasta containing ref genome")],
     barcode_file: Annotated[str, typer.Argument(help="Text file containing whitelisted barcode per line")],
-    gtf_file: Annotated[str, typer.Argument(help="GTF file containing relevant gene data - TODO make optional")],
+    gtf_file: Annotated[str, typer.Argument(help="GTF file containing relevant gene data")],
     t7_barcode: Annotated[
         Optional[str],
         typer.Option(
             "--t7",
             "--t7_barcode",
-            "--target",
-            "--query",
-            "--query_sequence",
             help=(
                 "Target/query barcode sequence to denote t7 reads. "
                 "Default: 'GGGAGAGTAT'"
                 )
             )
-        ] = None,
+        ] = "GGGAGAGTAT",
 blacklist_file: Annotated[
         Optional[str],
         typer.Option(
@@ -63,21 +60,21 @@ whitelist_file: Annotated[
             "--kmer",
             "--kmer_size",
             help=("Size of kmers used to pattern match read barcodes to the t7 barcode. "
-                  "Default: 5"
+                  "Default: 6"
                   )
             )
-        ] = 5,
+        ] = 6,
     edit_dist: Annotated[
         Optional[int],
         typer.Option(
             "--edit_dist",
             "--edist",
             "--dist",
-            help=("Distance from edit site to be grouped as same edit. "
-                  "Default: 20"
+            help=("+/- distance from edit site to be grouped as same edit. "
+                  "Default: 140"
                   )
             )
-        ] = 20,
+        ] = 140,
 stranded_edit_dist: Annotated[
         Optional[int],
         typer.Option(
@@ -103,7 +100,7 @@ stranded_edit_dist: Annotated[
             "--nonbc_edist",
             "--nonbc_dist",
             "--nonbc",
-            help=("Distance from edit to mop up the non-barcoded reads. "
+            help=("+/- distance from edit to mop up the non-barcoded reads."
                   "Default: 1000"
                   )
             )

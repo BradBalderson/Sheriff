@@ -1,3 +1,5 @@
 subset_500_cell_sheriff_output/
 example_data/
+build/
+dist/
 Sheriff.egg-info/
