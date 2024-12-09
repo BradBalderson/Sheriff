@@ -24,8 +24,7 @@ def get_t7_edits(
             "--t7",
             "--t7_barcode",
             help=(
-                "Target/query barcode sequence to denote t7 reads. "
-                "Default: 'GGGAGAGTAT'"
+                "Target/query barcode sequence to denote t7 reads."
                 )
             )
         ] = "GGGAGAGTAT",
@@ -37,7 +36,6 @@ blacklist_file: Annotated[
             help=(
                 "Bed file that species the location of blacklist regions, these generate alot of endogenuous t7 reads "
                 "that can lead to slow processing time and false-positive edit-site calling."
-                "Default: None"
                 )
             )
         ] = None,
@@ -49,7 +47,6 @@ whitelist_file: Annotated[
             help=(
                 "Bed file that species the location of whitelist regions, which are known edit sites and so will call "
                 "any barcoded reads implying an edit site intersecting these regions as canonical edit sites."
-                "Default: None"
                 )
             )
         ] = None,
@@ -59,8 +56,7 @@ whitelist_file: Annotated[
             "-k",
             "--kmer",
             "--kmer_size",
-            help=("Size of kmers used to pattern match read barcodes to the t7 barcode. "
-                  "Default: 6"
+            help=("Size of kmers used to pattern match read barcodes to the t7 barcode."
                   )
             )
         ] = 6,
@@ -70,17 +66,25 @@ whitelist_file: Annotated[
             "--edit_dist",
             "--edist",
             "--dist",
-            help=("+/- distance from edit site to be grouped as same edit. "
-                  "Default: 140"
+            help=("+/- distance from edit site to be grouped as same edit."
                   )
             )
         ] = 140,
-stranded_edit_dist: Annotated[
+    edit_site_rev_comp_filt: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--bidirectional_inserts",
+            help=(
+                "Candidate edit site must have evidence of bi-directional donor insertion to be called as a canonical edit site."
+                "Highly recommended criteria."
+                )
+            )
+        ] = True,
+    stranded_edit_dist: Annotated[
         Optional[int],
         typer.Option(
             "--stranded_edit_dist",
-            help=("Maximum allowed distance between the nearest forward and reverse edit sites at a given canonical edit site to qualify as real edit. "
-                  "Default: 15"
+            help=("Maximum allowed distance between the nearest forward and reverse edit sites at a given canonical edit site to qualify as real edit."
                   )
             )
         ] = 15,
@@ -88,8 +92,7 @@ stranded_edit_dist: Annotated[
         Optional[int],
         typer.Option(
             "--edit_site_min_cells",
-            help=("Minimum cells in edit site to be considered true edit. "
-                  "Default: 3"
+            help=("Minimum cells in edit site to be considered true edit."
                   )
             )
         ] = 3,
@@ -101,7 +104,6 @@ stranded_edit_dist: Annotated[
             "--nonbc_dist",
             "--nonbc",
             help=("+/- distance from edit to mop up the non-barcoded reads."
-                  "Default: 1000"
                   )
             )
         ] = 1000,
@@ -110,7 +112,6 @@ stranded_edit_dist: Annotated[
         typer.Option(
             "--ploidy",
             help=("Ploidy/Number of chromosomes in the genome."
-                  "Default: 2"
                   )
             )
         ] = 2,
@@ -122,8 +123,7 @@ stranded_edit_dist: Annotated[
             "--copy_number_variant_file",
             help=(
                 "A bedGraph file that specifies copy-number-variation sites, "
-                "that deviate from the ploidy number. "
-                "Default: None"
+                "that deviate from the ploidy number."
                 )
             )
         ] = None,
@@ -134,7 +134,6 @@ stranded_edit_dist: Annotated[
             help=(
                 "Text file of sequences, with a new sequence on each line, that may be present in read soft-clip sequences"
                 "can confound t7 barcoded read calls. Currently only the TSO, which is a common left-over artifact."
-                "Default: None"
                 )
             )
         ] = None,
@@ -145,7 +144,6 @@ stranded_edit_dist: Annotated[
             help=(
                 "Mode for quantifying gene expression,"
                 "'all' is to count all reads associated with a gene, 'polyT' is to only count polyT reads, indicating mature mRNA transcripts."
-                "Default: all"
                 )
             )
         ] = "all",
@@ -161,7 +159,6 @@ stranded_edit_dist: Annotated[
                 "Defaults to Current Working Directory"
                 ),
             )] = None
-    
 ):
     
     # Run
@@ -184,10 +181,10 @@ stranded_edit_dist: Annotated[
                  blacklist_seqs=blacklist_seqs,
                  mrna_count_mode=mrna_count_mode,
                  outdir=outdir,
-                 edit_site_rev_comp_filt=True,
+                 edit_site_rev_comp_filt=edit_site_rev_comp_filt,
                  max_gene_count_reads=None,
-                 uncorrected_gene_count=True, # For testing
-                 constrain_allele_calls=False
+                 uncorrected_gene_count=False, # For testing
+                 constrain_allele_calls=False,
                  )
 
 def main():
