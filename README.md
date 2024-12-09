@@ -22,7 +22,7 @@ To install from source:
 
 Usage
 -----
-    $ sheriff ---help
+    sheriff ---help
      Usage: sheriff [OPTIONS] BAM_FILE REF_FILE BARCODE_FILE GTF_FILE
 
     ╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -95,7 +95,38 @@ Usage
 
 Example
 ------
-    $ sheriff ... 
+#### Preparing reference genome
+    wget http://ftp.ensembl.org/pub/release-110/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz -O example_data/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
+    gzip -d example_data/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
+    samtools faidx example_data/Homo_sapiens.GRCh38.dna.primary_assembly.fa
+
+#### Preparing reference annotations
+    wget http://ftp.ensembl.org/pub/release-110/gtf/homo_sapiens/Homo_sapiens.GRCh38.110.gtf.gz -O example_data/Homo_sapiens.GRCh38.110.gtf.gz
+    gzip -d example_data/Homo_sapiens.GRCh38.110.gtf.gz
+
+#### Running Sheriff
+***NOTE*** The bam file used here is for the more deeply sequenced 500 cell library, with reads subsetted to those occuring
+with 200kb of a true called canonical edit site in a larger 10k cell library. Therefore the edit site calling will be 
+accurate (though will be missing some edit sites compared with the 10k library), ***BUT*** the gene counts will be NOT
+accurate because most reads have been filtered from the bam so can easily make it available via github.
+
+#### Setting parameters
+***NOTE*** 
+For minimum cells to call canonical edit site, used 3 for 10k library, recommend increasing for larger cell libraries to reduce false positive calls.
+CNV file only necessary if have copy number variants in the genome, can exclude and will assume 2 copies throughout. See 'ploidy' parameter.
+
+    dir_="example_data/"
+    bam_="${dir_}barcode_headAligned_anno.sorted.edit_regions_200kb.bam"
+    ref_="${dir_}Homo_sapiens.GRCh38.dna.primary_assembly.fa"
+    cells_="${dir_}barcode_whitelist.500-cell.txt"
+    gtf_="${dir_}Homo_sapiens.GRCh38.110.gtf"
+    cnv_="${dir_}K562_CNV_hg19.tsv"
+    blacklist_="${dir_}black_100x_peaks_by_qval.simple_repeats_50N.EXTRA.bed"
+    blacklist_seqs="${dir_}blacklist_seqs.txt"
+    min_="1" 
+    out_dir="./subset_500_cell_sheriff_output/"
+
+    sheriff ${bam_} ${ref_} ${cells_} ${gtf_} --cnv_file ${cnv_} --blacklist_file ${blacklist_} --blacklist_seqs ${blacklist_seqs} --edit_site_min_cells ${min_} -o ${out_dir} 
 
 Output
 ------
