@@ -1,10 +1,9 @@
 """ Helper functions for processing the t7 sequencing
 """
 
+import sys
 import re
 import itertools # Used to do pairwise comparisons of umis for similarity
-
-from Bio import pairwise2 # pip install bipython
 
 from collections import defaultdict
 
@@ -12,6 +11,13 @@ import numpy as np
 import pandas as pd
 
 from pysam.libcalignmentfile import AlignmentFile
+
+import warnings
+from Bio import BiopythonDeprecationWarning
+
+# Suppress only BiopythonDeprecationWarning
+warnings.simplefilter("ignore", BiopythonDeprecationWarning)
+from Bio import pairwise2  # pip install biopython
 
 def get_t7_count_matrix(cell_barcodes_dict, canonical_to_edits, canonical_edit_bc_cell_umis_filtered):
     """ Performs the UMI counting per edit site, either for the barcoded or non-barcoded reads!
@@ -50,9 +56,6 @@ def get_cell_counts_from_umi_dict(cell_bc_to_umis, cell_barcodes_dict):
     for cell_barcode, cell_index in cell_barcodes_dict.items():
 
         umi_set = cell_bc_to_umis[cell_barcode]
-        
-        # Changed index mapping from list to dict
-        #cell_index = cell_barcodes_dict[cell_barcode]
 
         # umi_set = set(umis) # stored as set automatically now
         num_unique_umi = len(umi_set)
@@ -97,59 +100,6 @@ def get_cell_counts_from_umi_dict(cell_bc_to_umis, cell_barcodes_dict):
 
     return cell_umi_counts
 
-
-
-# def get_cell_counts_from_umi_dict(cell_bc_to_umis, cell_barcodes_list):
-#     """Gets the counts across cells for a given barcode to umi dict
-#     """
-#     cell_umi_counts = np.zeros((len(cell_barcodes_list)))
-
-#     for cell_barcode, umis in cell_bc_to_umis.items():
-
-#         cell_index = cell_barcodes_list.index(cell_barcode)
-
-#         umi_set = set(umis)
-#         if len(umi_set) > 1:
-#             # Need to account for sequencing error in the UMIs
-#             # nltk.edit_distance(edit_1_seq, edit_2_seq)
-#             umis_to_match_umis = {umi: {umi} for umi in umi_set}  # initialise with just a set of itself
-#             for umi_1, umi_2 in itertools.combinations(umi_set, 2):
-#                 edit_dist = nltk.edit_distance(umi_1, umi_2)
-#                 if edit_dist <= 1:
-#                     # To make sure all sets know about each other, need to unionise them
-#                     umis_to_match_umis[umi_1] = umis_to_match_umis[umi_1].union(umis_to_match_umis[umi_2])
-#                     umis_to_match_umis[umi_2] = umis_to_match_umis[umi_2].union(umis_to_match_umis[umi_1])
-
-#                     # syncing!
-#                     # Need to also pull in the umis with edit distance 1 that are also edit distance 1 from
-#                     # this umi!
-#                     for umi in umis_to_match_umis[umi_1]:
-#                         umis_to_match_umis[umi_1] = umis_to_match_umis[umi_1].union(umis_to_match_umis[umi])
-#                         umis_to_match_umis[umi_2] = umis_to_match_umis[umi_2].union(umis_to_match_umis[umi])
-
-#                     # Now need to update all the other umis with these umis edit dist 1
-#                     for umi in umis_to_match_umis[umi_1]:
-#                         umis_to_match_umis[umi] = umis_to_match_umis[umi].union(umis_to_match_umis[umi_1])
-
-#             unique_umi_sets = []
-#             [unique_umi_sets.append(umi_set_) for umi_set_ in umis_to_match_umis.values()
-#              if umi_set_ not in unique_umi_sets]
-
-#             # for dubugging check... Checked by eye and looks good!!!
-#             # if len(unique_umi_sets) != len(umi_set):
-#             #     print([set_ for set_ in list(unique_umi_sets) if len(set_)>1])
-#             #     print("here")
-
-#             # Counting sets of unique UMIs with edit_dist=1
-#             cell_umi_counts[cell_index] += len(unique_umi_sets)
-
-#         else:  # Just one umi, so can't be colliding with another
-#             # Counting unique UMI for each!
-#             cell_umi_counts[cell_index] += 1
-
-#     return cell_umi_counts
-
-
 def bam_count_gene_umis(bam_file, cell_barcodes_dict, gene_names, allt7_reads=None,
                         max_reads=None, # Just for testing purposes...
                         ):
@@ -174,9 +124,6 @@ def bam_count_gene_umis(bam_file, cell_barcodes_dict, gene_names, allt7_reads=No
             # Using filt bam means I shouldnt have to check against allt7
             if (cell_barcode not in cell_barcodes_dict):
                 continue
-            
-            # if (not cell_barcode in cell_barcodes) or (read.query_name in allt7_reads):
-            #     continue
 
             gene_name_tag = read.get_tag('GN')
             gene_id_tag = read.get_tag('GX')
@@ -188,29 +135,9 @@ def bam_count_gene_umis(bam_file, cell_barcodes_dict, gene_names, allt7_reads=No
             else:
                 continue
 
-            # storing the UMI
-            
-            # This whole situation kinda defeats the purpose of default dict, also kinda complex
-            # if cell_barcode not in genes_to_bcs_to_umis[gene_or_id]:
-            #     genes_to_bcs_to_umis[gene_or_id][cell_barcode] = [ read.get_tag('pN') ]
-            # elif read.get_tag('pN') not in genes_to_bcs_to_umis[gene_or_id][cell_barcode]:
-            #     genes_to_bcs_to_umis[gene_or_id][cell_barcode].append( read.get_tag('pN') )
-            
             # Should be cleaner and faster
             genes_to_bcs_to_umis[gene_or_id][cell_barcode].add(read.get_tag('pN'))
 
-
-
-            # for testing purposes, will stop early, so don't need to wait for this to completely finish before
-            # testing the umi deduplication.
-            # if type(max_reads)!=type(None):
-            #     if nreads == max_reads:
-            #         print(f"WARNING still only look at {max_reads} reads for testing the gene umi counting!!!!!")
-            #         break
-
-    # Collating the counts...
-    # cell_barcodes_list = list(cell_barcodes) # this is a bad idea need to change to not take in set
-    
     gene_names_list = list(gene_names)
     gene_names_dict = {key: value for value, key in enumerate(gene_names_list)}
     cell_by_gene_umi_counts = np.zeros((len(cell_barcodes_dict), len(gene_names)), dtype=np.uint16)
@@ -234,16 +161,11 @@ def within_single_mismatch(seq1, seq2):
             diff_score+=1
     return True
 
-
 def bio_edit_distance(seqA, seqB, start_from_first_smallest_seq_aln=True, alns_to_compare=None):
     """More biologically relevant edit distance, which does a global alignment between two strings, then takes the
         edit distance as the number of gaps introduced minus the difference in sequence length. Will result
         in a 0 score if one sequence is a subset of the other.
     """
-
-    #### This version introduced too many gaps to get the sequences to match
-    #aln = pairwise2.align.globalms(seqA, seqB, 1, -1, -1, -1, one_alignment_only=True)[0]
-
     ### Puts the sequences together better, at the 5' end
     aln = pairwise2.align.localms(seqA, seqB,
                                   1, # score for match
@@ -251,8 +173,6 @@ def bio_edit_distance(seqA, seqB, start_from_first_smallest_seq_aln=True, alns_t
                                   -.5, # gap-open penalty
                                   -.5, # gap-extension penalty
                                   one_alignment_only=True)[0]
-    #edit_dist = len([(a,b) for a,b in zip(aln.seqA, aln.seqB) if a!=b]) # aln.seqA.count('-') + aln.seqB.count('-')
-    #edit_dist -= abs(len(seqA) - len(seqB))
 
     seq_lens = [len(seqA), len(seqB)]
     shorter_seq_index = np.argmin(seq_lens)
@@ -277,10 +197,6 @@ def bio_edit_distance(seqA, seqB, start_from_first_smallest_seq_aln=True, alns_t
 
             if n_seen == seq_lens[shorter_seq_index]: # seen all characters
                 break
-
-    # For debugging
-    #print(format_alignment(*aln))
-    #print(f'{aln.seqA}\n{aln.seqB}')
 
     return edit_dist
 
@@ -385,7 +301,6 @@ def get_edit_sets(edit_set):
                 #                      abs(len(edit_1_seq_homo_fix) - len(edit_2_seq_homo_fix)))
                 dist_between_seqs = bio_edit_distance(edit_1_seq_homo_fix,
                                                       edit_2_seq_homo_fix) - 1  # -1 because the homopolymer extra error
-                # print(format_alignment(*pairwise2.align.globalxx(edit_1_seq_homo_fix, edit_2_seq_homo_fix)[0]))
 
         # Base-pair sequencing error correction
         # Some cases where the edits are VERY similar, off by 1bp, likely sequencing error!
@@ -458,10 +373,6 @@ def get_longest_edits(edit_set):
                 if edit_2 not in sub_edits:
                     longest_edits.append( edit_2 )
 
-                # For debugging, understanding contamination.
-                # if np.any([sub_edit in longest_edits for sub_edit in sub_edits]):
-                #     print("here")
-
                 continue
 
             # Both forwards, so could be from the same allele with different variation in start site
@@ -521,12 +432,7 @@ def get_longest_edits(edit_set):
                     # 2
                     # due to the substitution cost, it prefers to flip two characters rather than create a gap,
                     # which would yield a 1 edit distance. To enable this, will lower the substitution cost
-                    # dist_between_seqs = (nltk.edit_distance(edit_1_seq_homo_fix, edit_2_seq_homo_fix, substitution_cost=0.5) -
-                    #                      abs(len(edit_1_seq_homo_fix) - len(edit_2_seq_homo_fix)))
                     dist_between_seqs = bio_edit_distance(edit_1_seq_homo_fix, edit_2_seq_homo_fix) - 1  # -1 because the homopolymer adds extra error
-                    # print(format_alignment(*pairwise2.align.globalxx(edit_1_seq_homo_fix, edit_2_seq_homo_fix)[0]))
-                    # edit_1_seq = edit_1_seq_homo_fix
-                    # edit_2_seq = edit_2_seq_homo_fix
 
             # They are different from one another in the sense that one is not a subset of the other (i.e. not
             # different due to different t7 primering).
@@ -566,7 +472,6 @@ def get_longest_edits(edit_set):
                         long_index = np.argmax(n_kmers)
                     else: # Match from this criteria to, just choose the first then
                         long_index = 0
-                        #print("!!!!!!!!!!!!! WARNNINGGGGGGGGGG arbitratry edit chosen..")
 
                 long_edit = edit_pair.pop(long_index)
                 long_edits = [long_edit] # So can process as a list below!
@@ -594,14 +499,13 @@ def get_longest_edits(edit_set):
 
     # The surviving longest edits did not have a match with a longer t7 insert, so they are the set of unique edit sites
     longest_edits = list( set(longest_edits) )
-    if len(longest_edits) == 0:
-        print("here")
 
     return longest_edits
 
 def bed_file_flag_edits(bed_file, canonical_edit_sites, keep_sites, whitelist,
                           edit_dist, # Extra error around the edit site specification to allow for overlap with the bed regions
-                          ):
+                          verbosity=1,
+                        ):
     """ whitelist = True flag to flag any of the canonical edit sites for REMOVAL if intersect with the bed regions.
         whitelist = False to flag any canonical edit sites that intersect with the bed regions to KEEP.
     """
@@ -622,12 +526,6 @@ def bed_file_flag_edits(bed_file, canonical_edit_sites, keep_sites, whitelist,
     blacklist_chrom_to_indices = {chrom: np.where(blacklist_chroms == chrom)[0]
                                   for chrom in black_chrom_set}
 
-    ## For testing edits: Worked well!!!
-    # test_edits = [EditSite(chrom="hg38_11", ref_pos=65499074+edit_dist-10), # overlap start with edit_dist
-    #               EditSite(chrom="hg38_2", ref_pos=148881819-edit_dist+10), # overlap end with edit dist
-    #               EditSite(chrom="hg38_16", ref_pos=148881819-edit_dist+10), # no overlap due to diff chromosome
-    #               EditSite(chrom="hg38_11", ref_pos=2000-edit_dist+10)] # no overlap diff region
-    # for edit_site in test_edits:
     flagged_indices = []
     for index in keep_indices:
         edit_site = canonical_edit_sites[index]
@@ -641,10 +539,11 @@ def bed_file_flag_edits(bed_file, canonical_edit_sites, keep_sites, whitelist,
             overlap_bool = np.logical_and(starts_ <= (edit_pos + edit_dist), ends_ >= (edit_pos - edit_dist))
 
             if np.any(overlap_bool):
-                keep_sites[index] = whitelist #False  # Setting the keep_site to false, so now we filter this edit site !!!
+                keep_sites[index] = whitelist # Setting the keep_site to false, so now we filter this edit site !!!
                 flagged_indices.append( index )
-                print(f"Overlap found: {edit_site}: ")
+                print(f"Overlap found: {edit_site}: ", file=sys.stdout, flush=True) if verbosity >= 2 else None
                 for overlap_index in np.where(overlap_bool)[0]:
-                    print(f"{filter_type} region {edit_chrom}: {starts_[overlap_index]}-{ends_[overlap_index]}")
+                    print(f"{filter_type} region {edit_chrom}: {starts_[overlap_index]}-{ends_[overlap_index]}",
+                                               file=sys.stdout, flush=True) if verbosity >= 2 else None
 
     return flagged_indices

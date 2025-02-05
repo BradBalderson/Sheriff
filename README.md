@@ -5,24 +5,28 @@ Sheriff
 
 **Sheriff processes aligned Superb-seq data to call edit sites and quantify gene expression in single cells** 
 
-The inputted bam must be the annotated bam file from split-pipe.
+The inputted bam must be the annotated bam file outputted from split-pipe, which is available after creating an account at [Parse Biosciences](https://support.parsebiosciences.com/hc/en-us/articles/17200056667924-Pipeline-Download-Current-Version).
+
+For split-pipe version and commands used to process the fastq files to the annotated bam file, please see the [super_analysis repository](https://github.com/BradBalderson/superb_analysis/tree/main).
 
 Install
 -------
 Please replace 'mamba' with 'conda' if not installed, mamba much faster however (recommend installing mamba!).
 
+Expected install time is approximately 1-minute. 
+
+The current version has been tested with python 3.10 using the conda environment setup specified below, 
+on both linux (Rocky 9 distro) and macOS Sonoma 14.1.  
+
 To install from source:
+
+    mamba create -n sheriff_env python=3.10
+    mamba activate sheriff_env
+    mamba install conda-forge::biopython=1.81 typing_extensions typer bioconda::pyranges bioconda::pysam 
 
     git clone https://github.com/BradBalderson/Sheriff.git
     cd Sheriff
-
-    conda create -n sheriff_env python=3.10
-    conda activate sheriff_env
-
-    python3 setup.py install
-
-    mamba install typing_extensions typer polars bioconda::pyranges faiss bioconda::gtfparse bioconda::pysam conda-forge::biopython
-    pip install gtfparse==2.5.0
+    pip install .
 
 Usage
 -----
@@ -37,40 +41,50 @@ Usage
     │ *    gtf_file          TEXT  GTF file containing relevant gene data [default: None] [required]                                                                                                                     │
     ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
     ╭─ Options ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-    │ --t7,--t7_barcode                                             TEXT     Target/query barcode sequence to denote t7 reads. [default: GGGAGAGTAT]                                                                     │
-    │ --blacklist,--blacklist_file                                  TEXT     Bed file that species the location of blacklist regions, these generate alot of endogenuous t7 reads that can lead to slow processing time  │
-    │                                                                        and false-positive edit-site calling.                                                                                                       │
-    │                                                                        [default: None]                                                                                                                             │
-    │ --whitelist,--whitelist_file                                  TEXT     Bed file that species the location of whitelist regions, which are known edit sites and so will call any barcoded reads implying an edit    │
-    │                                                                        site intersecting these regions as canonical edit sites.                                                                                    │
-    │                                                                        [default: None]                                                                                                                             │
-    │ --kmer,--kmer_size                                    -k      INTEGER  Size of kmers used to pattern match read barcodes to the t7 barcode. [default: 6]                                                           │
-    │ --edit_dist,--edist,--dist                                    INTEGER  +/- distance from edit site to be grouped as same edit. [default: 140]                                                                      │
-    │ --bidirectional_inserts                                                Candidate edit site must have evidence of bi-directional donor insertion to be called as a canonical edit site.Highly recommended criteria. │
-    │                                                                        [default: True]                                                                                                                             │
-    │ --stranded_edit_dist                                          INTEGER  Maximum allowed distance between the nearest forward and reverse edit sites at a given canonical edit site to qualify as real edit.         │
-    │                                                                        [default: 15]                                                                                                                               │
-    │ --edit_site_min_cells                                         INTEGER  Minimum cells in edit site to be considered true edit. [default: 3]                                                                         │
-    │ --nonbc_edit_dist,--nonbc_edist,--nonbc_dist,--nonbc          INTEGER  +/- distance from edit to mop up the non-barcoded reads. [default: 1000]                                                                    │
-    │ --ploidy                                                      INTEGER  Ploidy/Number of chromosomes in the genome. [default: 2]                                                                                    │
-    │ --cnv,--cnv_file,--copy_number_variant_file                   TEXT     A bedGraph file that specifies copy-number-variation sites, that deviate from the ploidy number. [default: None]                            │
-    │ --blacklist_seqs                                              TEXT     Text file of sequences, with a new sequence on each line, that may be present in read soft-clip sequencescan confound t7 barcoded read      │
-    │                                                                        calls. Currently only the TSO, which is a common left-over artifact.                                                                        │
-    │                                                                        [default: None]                                                                                                                             │
-    │ --mrna_count_mode                                             TEXT     Mode for quantifying gene expression,'all' is to count all reads associated with a gene, 'polyT' is to only count polyT reads, indicating   │
-    │                                                                        mature mRNA transcripts.                                                                                                                    │
-    │                                                                        [default: all]                                                                                                                              │
-    │ --out,--outdir,--out_dir                              -o      TEXT     Write output files to this location. Defaults to Current Working Directory [default: None]                                                  │
-    │ --install-completion                                                   Install completion for the current shell.                                                                                                   │
-    │ --show-completion                                                      Show completion for the current shell, to copy it or customize the installation.                                                            │
-    │ --help                                                                 Show this message and exit.                                                                                                                 │
+    │ --t7,--t7_barcode                                                        TEXT     Target/query barcode sequence to denote t7 reads. [default: GGGAGAGTAT]                                                          │
+    │ --blacklist,--blacklist_file                                             TEXT     Bed file that species the location of blacklist regions, these generate alot of endogenuous t7 reads that can lead to slow       │
+    │                                                                                   processing time and false-positive edit-site calling.                                                                            │
+    │                                                                                   [default: None]                                                                                                                  │
+    │ --whitelist,--whitelist_file                                             TEXT     Bed file that species the location of whitelist regions, which are known edit sites and so will call any barcoded reads implying │
+    │                                                                                   an edit site intersecting these regions as canonical edit sites.                                                                 │
+    │                                                                                   [default: None]                                                                                                                  │
+    │ --kmer,--kmer_size                                    -k                 INTEGER  Size of kmers used to pattern match read barcodes to the t7 barcode. [default: 6]                                                │
+    │ --edit_dist,--edist,--dist                                               INTEGER  +/- distance from edit site to be grouped as same edit. [default: 140]                                                           │
+    │ --bidirectional_inserts                                                           Candidate edit site must have evidence of bi-directional donor insertion to be called as a canonical edit site.Highly            │
+    │                                                                                   recommended criteria.                                                                                                            │
+    │                                                                                   [default: True]                                                                                                                  │
+    │ --stranded_edit_dist                                                     INTEGER  Maximum allowed distance between the nearest forward and reverse edit sites at a given canonical edit site to qualify as real    │
+    │                                                                                   edit.                                                                                                                            │
+    │                                                                                   [default: 15]                                                                                                                    │
+    │ --edit_site_min_cells                                                    INTEGER  Minimum cells in edit site to be considered true edit. [default: 3]                                                              │
+    │ --nonbc_edit_dist,--nonbc_edist,--nonbc_dist,--nonbc                     INTEGER  +/- distance from edit to mop up the non-barcoded reads. [default: 1000]                                                         │
+    │ --ploidy                                                                 INTEGER  Ploidy/Number of chromosomes in the genome. [default: 2]                                                                         │
+    │ --cnv,--cnv_file,--copy_number_variant_file                              TEXT     A bedGraph file that specifies copy-number-variation sites, that deviate from the ploidy number. [default: None]                 │
+    │ --blacklist_seqs                                                         TEXT     Text file of sequences, with a new sequence on each line, that may be present in read soft-clip sequencescan confound t7         │
+    │                                                                                   barcoded read calls. Currently only the TSO, which is a common left-over artifact.                                               │
+    │                                                                                   [default: None]                                                                                                                  │
+    │ --mrna_count_mode                                                        TEXT     Mode for quantifying gene expression,'all' is to count all reads associated with a gene, 'polyT' is to only count polyT reads,   │
+    │                                                                                   indicating mature mRNA transcripts.                                                                                              │
+    │                                                                                   [default: all]                                                                                                                   │
+    │ --out,--outdir,--out_dir                              -o                 TEXT     Write output files to this location. Defaults to Current Working Directory [default: None]                                       │
+    │ --v,--verbosity                                       -v,-verbosity      INTEGER  Verbosity levels. 0 errors only, 1 prints processing progress, 2 prints debugging information. [default: 1]                      │
+    │ --install-completion                                                              Install completion for the current shell.                                                                                        │
+    │ --show-completion                                                                 Show completion for the current shell, to copy it or customize the installation.                                                 │
+    │ --help                                                                            Show this message and exit.                                                                                                      │
     ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 Example
 ------
+
+Expected run-time for data preparation below is ~2 minutes.
+
+Assumes are in the Sheriff directory.
+
 #### Preparing reference genome
     wget http://ftp.ensembl.org/pub/release-110/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz -O example_data/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
     gzip -d example_data/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
+
+    mamba install samtools
     samtools faidx example_data/Homo_sapiens.GRCh38.dna.primary_assembly.fa
 
 #### Preparing reference annotations
@@ -88,6 +102,8 @@ accurate because most reads have been filtered from the bam so can easily make i
 For minimum cells to call canonical edit site, used 3 for 10k library, recommend increasing for larger cell libraries to reduce false positive calls.
 CNV file only necessary if have copy number variants in the genome, can exclude and will assume 2 copies throughout. See 'ploidy' parameter.
 
+Expected run time for this demo is <30 seconds.
+
     dir_="example_data/"
     bam_="${dir_}barcode_headAligned_anno.sorted.edit_regions_200kb.bam"
     ref_="${dir_}Homo_sapiens.GRCh38.dna.primary_assembly.fa"
@@ -104,10 +120,17 @@ CNV file only necessary if have copy number variants in the genome, can exclude 
 Output
 ------
 
+***NOTE*** the parquet.gz files listed below are a binary format (even when unzipped). 
+Example code to read these files in Python and R is provided below.
+
+The output directory for this example is: 
+
+    ./subset_500_cell_sheriff_output/
+
 Output files include:
 
 - **edit_site_info.txt**: Has the edit site information, name, location, window size, and overlapping genes.
-- **edit_site.bed**: Bed file of the edit site locations.
+- **edit_sites.bed**: Bed file of the edit site locations.
 - **t7_barcode_edits.tsv**: Particular edit events, with detail on which canonical-edit-site the edit belongs to,
                             and the ref and alt sequence at the particular edit site.
 - **cell_allelic_dosage.canonical-edit-sites.parquet.gz**: (cell X edit-site) matrix of counts, for called allelic edits.
@@ -130,11 +153,17 @@ Reading output
 ------
 ***NOTE*** for the parquet.gz files, these can be rapidly read with pandas in Python:
 
+    python
+
     import pandas as pd
 
     cell_by_gene_edit_dosage = pd.read_parquet("subset_500_cell_sheriff_output/cell_allelic_dosage.canonical-edit-sites.gene-collapsed.parquet.gz")
 
 Or in R:
+
+    mamba install r-base
+
+    R
 
     install.packages("arrow")
     library(arrow)

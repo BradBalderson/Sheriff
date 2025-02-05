@@ -158,7 +158,18 @@ whitelist_file: Annotated[
                 "Write output files to this location. "
                 "Defaults to Current Working Directory"
                 ),
-            )] = None
+            )] = None,
+    verbosity: Annotated[
+            Optional[int],
+            typer.Option(
+                "--v",
+                "-v",
+                "--verbosity",
+                "-verbosity",
+                help=("Verbosity levels. 0 errors only, 1 prints processing progress, 2 prints debugging information."
+                      )
+                )
+            ] = 1
 ):
     
     # Run
@@ -185,6 +196,7 @@ whitelist_file: Annotated[
                  max_gene_count_reads=None,
                  uncorrected_gene_count=False, # For testing
                  constrain_allele_calls=False,
+                 verbosity=verbosity,
                  )
 
 def main():
