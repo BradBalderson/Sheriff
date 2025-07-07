@@ -685,31 +685,35 @@ def run_count_t7(bam_file,
               file=sys.stdout, flush=True) if verbosity>= 1 else None
 
     # Now also filtering based on stranded edit distance!!!
+    #if edit_site_rev_comp_filt and type(stranded_edit_dist)!=type(None):
+    keep_indices = np.where(keep_sites)[0]
+    canonical_to_stranded_edit_dist = {}
+    for index in keep_indices:
+        edit_site = canonical_edit_sites[index]
+
+        # With this logic, will still record information about the stranded edit site distance IF we are not using
+        # the bi-directional insert criteria OR the edit site has been white-listed.
+        if not canonical_edit_reversed[index] and \
+            (index in whitelist_canonical_edit_indices or edit_site_rev_comp_filt==False): # If is a
+            canonical_to_stranded_edit_dist[edit_site] = np.nan
+            continue
+
+        particular_edits = canonical_to_edits[edit_site]
+        forward_edit_locs = np.array([edit_.ref_pos for edit_ in particular_edits if edit_.forward])
+        reverse_edit_locs = np.array([edit_.ref_pos for edit_ in particular_edits if not edit_.forward])
+        closest_forward = forward_edit_locs[ np.argmin( np.abs( forward_edit_locs-edit_site.ref_pos ) ) ]
+        closest_reverse = reverse_edit_locs[ np.argmin( np.abs( reverse_edit_locs-edit_site.ref_pos ) ) ]
+
+        # Will keep the whitelisted regions regardless of the stranded edit distance, OR keep all the called edit sites
+        # if we are not considering the bi-directional inserts criteria.
+        edit_stranded_dist = np.abs( closest_forward - closest_reverse )
+        if type(stranded_edit_dist)!=type(None) and edit_stranded_dist >= stranded_edit_dist and \
+                (index not in whitelist_canonical_edit_indices or edit_site_rev_comp_filt==False):
+            keep_sites[index] = False # The distance between the forward and reverse edits is far, so likely not true edit.
+        else:
+            canonical_to_stranded_edit_dist[edit_site] = edit_stranded_dist
+
     if edit_site_rev_comp_filt and type(stranded_edit_dist)!=type(None):
-        keep_indices = np.where(keep_sites)[0]
-        canonical_to_stranded_edit_dist = {}
-        for index in keep_indices:
-            edit_site = canonical_edit_sites[index]
-
-            # Need to bypass whitelist regions with no reverse edits from this logic, since they will not have an example
-            # read in the opposite direction to calculated the stranded edit distance.
-            if index in whitelist_canonical_edit_indices and not canonical_edit_reversed[index]:
-                canonical_to_stranded_edit_dist[edit_site] = np.nan
-                continue
-
-            particular_edits = canonical_to_edits[edit_site]
-            forward_edit_locs = np.array([edit_.ref_pos for edit_ in particular_edits if edit_.forward])
-            reverse_edit_locs = np.array([edit_.ref_pos for edit_ in particular_edits if not edit_.forward])
-            closest_forward = forward_edit_locs[ np.argmin( np.abs( forward_edit_locs-edit_site.ref_pos ) ) ]
-            closest_reverse = reverse_edit_locs[ np.argmin( np.abs( reverse_edit_locs-edit_site.ref_pos ) ) ]
-
-            edit_stranded_dist = np.abs( closest_forward - closest_reverse )
-            if edit_stranded_dist >= stranded_edit_dist and \
-                index not in whitelist_canonical_edit_indices: # Will keep the whitelisted regions regardless of the stranded edit distance.
-                keep_sites[index] = False # The distance between the forward and reverse edits is far, so likely not true edit.
-            else:
-                canonical_to_stranded_edit_dist[edit_site] = edit_stranded_dist
-
         print(f"{sum(keep_sites)} / {len(canonical_edit_sites)} kept after remove edit sites with >= {stranded_edit_dist} stranded edit distance.\n",
               file=sys.stdout, flush=True) if verbosity >= 1 else None
 

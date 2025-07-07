@@ -73,10 +73,12 @@ whitelist_file: Annotated[
     edit_site_rev_comp_filt: Annotated[
         Optional[bool],
         typer.Option(
-            "--bidirectional_inserts",
+            "--bidirectional_inserts/--no-bidirectional_inserts",
             help=(
                 "Candidate edit site must have evidence of bi-directional donor insertion to be called as a canonical edit site."
-                "Highly recommended criteria."
+                "Highly recommended criteria. If turned off, it also turns off --stranded_edit_dist criteria, but this "
+                "information about the edit sites are still recorded in the output via the 'stranded_edit_dist' column"
+                "in edit_site_info.txt"
                 )
             )
         ] = True,
