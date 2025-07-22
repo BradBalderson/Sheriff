@@ -118,9 +118,10 @@ Expected run time for this demo is <30 seconds.
     blacklist_="${dir_}black_100x_peaks_by_qval.simple_repeats_50N.EXTRA.bed"
     blacklist_seqs="${dir_}blacklist_seqs.txt"
     min_="1" 
+    cpu="1"
     out_dir="./subset_500_cell_sheriff_output/"
 
-    sheriff ${bam_} ${ref_} ${cells_} ${gtf_} --cnv_file ${cnv_} --blacklist_file ${blacklist_} --blacklist_seqs ${blacklist_seqs} --edit_site_min_cells ${min_} -o ${out_dir} 
+    sheriff ${bam_} ${ref_} ${cells_} ${gtf_} -cpu ${cpu} --cnv_file ${cnv_} --blacklist_file ${blacklist_} --blacklist_seqs ${blacklist_seqs} --edit_site_min_cells ${min_} -o ${out_dir} 
 
 Output
 ------
