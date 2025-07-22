@@ -514,6 +514,7 @@ def run_count_t7(bam_file,
                                             # 'all' is to count all reads associated with a gene,
                                             # 'polyT' is to only count polyT reads, indicating mature mRNA transcripts.
                  outdir=None, verbosity=1, n_cpus=1,
+                 chunk_size_mb=15, #Mb to process at a time, in parallel.
                  ):
     
     # Process output data stuff
@@ -1139,7 +1140,7 @@ def run_count_t7(bam_file,
 
     # Run using prefiltered non-t7 bam
     cell_by_gene_umi_counts = bam_count_gene_umis(filt_bam, cell_barcodes_dict, gene_names,
-                                                    n_cpus=n_cpus, verbose=(verbosity >= 1)
+                                                    n_cpus=n_cpus, verbose=(verbosity >= 1), chunk_size_mb=chunk_size_mb,
                                  )
 
     if uncorrected_gene_count and len(allt7_reads)>0: # only makes sense if there was actual edit sites.

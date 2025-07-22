@@ -1,6 +1,7 @@
 """ Helper functions for processing the t7 sequencing
 """
 
+import math
 import sys
 import re
 import itertools # Used to do pairwise comparisons of umis for similarity
@@ -311,6 +312,7 @@ def within_single_mismatch(seq1, seq2):
 #     return cell_umi_counts
 
 def bam_count_gene_umis(bam_file, cell_barcodes_dict, gene_names, n_cpus=1, verbose=True,
+                        chunk_size_mb=15, # Measured in mb
                         ):
     """ Count all the gene UMIs across the bam file!
     """
@@ -321,7 +323,25 @@ def bam_count_gene_umis(bam_file, cell_barcodes_dict, gene_names, n_cpus=1, verb
         # Determining the contig names so can parallelize across contigs.
         bam_ = AlignmentFile(bam_file, "rb")
         chrom_names = [contig['SN'] for contig in bam_.header['SQ']]
+        chrom_sizes = np.array([contig['LN'] for contig in bam_.header['SQ']])
         bam_.close()
+
+        # Let's set the chunk size to be 15Mbp, which is about 1/16th of chromosome 1.
+        chunk_size = chunk_size_mb * (10**6)
+
+        # Using this to determine a set of loci to be counted independently in parallel:
+        genome_chunks = []
+        for chr_, size_ in zip(chrom_names, chrom_sizes):
+            if size_ < chunk_size:
+                genome_chunks.append( [chr_] )
+            else:
+                start_ = 0
+                for end_ in range(chunk_size, size_, chunk_size):
+                    genome_chunks.append( (chr_, start_, end_) )
+                    start_ = end_ # re-set the start point!
+
+                if end_ < size_: # Truncated end of the contig
+                    genome_chunks.append((chr_, end_, size_))
 
         #### Processing in parallel
         from concurrent.futures import ProcessPoolExecutor
@@ -330,7 +350,7 @@ def bam_count_gene_umis(bam_file, cell_barcodes_dict, gene_names, n_cpus=1, verb
         partial_func = partial(bam_count_gene_umis_contig, bam_file, cell_barcodes_dict, gene_names, verbose)
 
         with ProcessPoolExecutor(max_workers=n_cpus) as executor:
-            contig_counts = list(executor.map(partial_func, chrom_names))
+            contig_counts = list(executor.map(partial_func, genome_chunks))
 
         cell_by_gene_umi_counts = contig_counts[0].values
         for counts_ in contig_counts[1:]:
@@ -359,7 +379,7 @@ def bam_count_gene_umis_contig(bam_file, cell_barcodes_dict, gene_names, verbose
     with AlignmentFile(bam_file, "rb") as bam:
         nreads = 0
         if type(contig)!=type(None):
-            iterator_ = bam.fetch(contig)
+            iterator_ = bam.fetch(*contig)
         else:
             iterator_ = bam
 

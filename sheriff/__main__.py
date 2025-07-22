@@ -180,7 +180,16 @@ whitelist_file: Annotated[
                 help=("Number of CPUs to use for processing, necessary to increase this for fast UMI counting."
                       )
                 )
-            ] = 1
+            ] = 1,
+chunk_size_mb: Annotated[
+            Optional[int],
+            typer.Option(
+                "--chunk",
+                "-chunk",
+                help=("Number of mega-bases to process at a time for gene UMI counting."
+                      )
+                )
+            ] = 15,
 ):
     
     # Run
@@ -209,6 +218,7 @@ whitelist_file: Annotated[
                  constrain_allele_calls=False,
                  verbosity=verbosity,
                  n_cpus=n_cpus,
+                 chunk_size_mb=chunk_size_mb,
                  )
 
 def main():

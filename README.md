@@ -28,6 +28,11 @@ To install from source:
     cd Sheriff
     pip install .
 
+    # ensure zlib is found, can be an issue on some machines.
+    export LDFLAGS="-L$CONDA_PREFIX/lib"
+    export CPPFLAGS="-I$CONDA_PREFIX/include"
+    export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
+
 Usage
 -----
     sheriff --help
@@ -119,7 +124,7 @@ Expected run time for this demo is <30 seconds.
     blacklist_seqs="${dir_}blacklist_seqs.txt"
     min_="1" 
     cpu="1"
-    out_dir="./subset_500_cell_sheriff_output/"
+    out_dir="./subset_500_cell_sheriff_output2/"
 
     sheriff ${bam_} ${ref_} ${cells_} ${gtf_} -cpu ${cpu} --cnv_file ${cnv_} --blacklist_file ${blacklist_} --blacklist_seqs ${blacklist_seqs} --edit_site_min_cells ${min_} -o ${out_dir} 
 
