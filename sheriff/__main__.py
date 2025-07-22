@@ -171,6 +171,15 @@ whitelist_file: Annotated[
                 help=("Verbosity levels. 0 errors only, 1 prints processing progress, 2 prints debugging information."
                       )
                 )
+            ] = 1,
+    n_cpus: Annotated[
+            Optional[int],
+            typer.Option(
+                "--cpu",
+                "-cpu",
+                help=("Number of CPUs to use for processing, necessary to increase this for fast UMI counting."
+                      )
+                )
             ] = 1
 ):
     
@@ -199,6 +208,7 @@ whitelist_file: Annotated[
                  uncorrected_gene_count=False, # For testing
                  constrain_allele_calls=False,
                  verbosity=verbosity,
+                 n_cpus=n_cpus,
                  )
 
 def main():

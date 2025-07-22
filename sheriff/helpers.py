@@ -15,6 +15,11 @@ from pysam.libcalignmentfile import AlignmentFile
 import warnings
 from Bio import BiopythonDeprecationWarning
 
+# numba-0.61.2 when developing this on mac.
+from numba import jit
+from numba import prange
+from numba.typed import List
+
 # Suppress only BiopythonDeprecationWarning
 warnings.simplefilter("ignore", BiopythonDeprecationWarning)
 from Bio import pairwise2  # pip install biopython
@@ -47,13 +52,148 @@ def get_t7_count_matrix(cell_barcodes_dict, canonical_to_edits, canonical_edit_b
 
     return t7_barcoded_counts
 
-
 def get_cell_counts_from_umi_dict(cell_bc_to_umis, cell_barcodes_dict):
-    """Gets the counts across cells for a given barcode to umi dict
-    """
-    cell_umi_counts = np.zeros((len(cell_barcodes_dict)), dtype=np.uint16)
+    """Gets the counts across cells for a given barcode to umi dict.
 
-    for cell_barcode, cell_index in cell_barcodes_dict.items():
+    VERY slow. Needs to be optimized for run speed because right now this eats most of the processing time.
+    """
+    if False:
+        return cell_umi_counts_original(cell_bc_to_umis, cell_barcodes_dict)
+    else: # Trying a speed optimized version.
+
+        # First need to filter the list of cell barcodes to those in the white list...
+        cell_bc_to_umis = {cell_bc: umis for cell_bc, umis in cell_bc_to_umis.items() if cell_bc in cell_barcodes_dict}
+
+        if len(cell_bc_to_umis) == 0:
+            return np.zeros(( len(cell_barcodes_dict) ), dtype=np.uint16)
+
+        # Now making more Numba friendly data structures.
+        # Re-processing these to make it simpler and also compilable with numba - namely will represent the UMI data as
+        # 2 numpy arrays and one list:
+        cell_bc_indexes = np.array([cell_barcodes_dict[cell_barcode] for cell_barcode in cell_bc_to_umis], dtype=np.int64)
+        umi_len = len( list( list(cell_bc_to_umis.values())[0] )[0] )
+        cell_umis = [np.array(list(umis), dtype=f'<U{umi_len}') for umis in cell_bc_to_umis.values()]
+
+        return cell_umi_counts_FAST(len(cell_barcodes_dict), cell_bc_indexes, cell_umis)
+
+@jit(nopython=True)
+def cell_umi_counts_FAST(total_cells, cell_bc_indexes, cell_umis):
+    """ Counts the cell UMIs FAST
+    """
+
+    cell_umi_counts = np.zeros((total_cells), dtype=np.uint16)
+
+    for i in range(len(cell_bc_indexes)):
+
+        cell_index = cell_bc_indexes[i]
+        umi_array = cell_umis[i]
+
+        num_unique_umi = len(umi_array)
+
+        if num_unique_umi == 1:
+            cell_umi_counts[cell_index] += 1
+        elif num_unique_umi == 2:
+            umi_1, umi_2 = umi_array
+
+            if within_single_mismatch_int(umi_1, umi_2):
+                cell_umi_counts[cell_index] += 1
+            else:
+                cell_umi_counts[cell_index] += 2
+        else:
+
+            cell_umi_counts[cell_index] = deduplicated_umi_count_FAST( umi_array )
+
+    return cell_umi_counts
+
+@jit(nopython=True)
+def deduplicated_umi_count_FAST( umi_array ):
+    """ Gets the deduplicated UMI count FAST!
+    """
+
+    # Now let's do this, get adjacency matrix between the umis first, and then a quick algorithm to get the disconnected
+    # sets.
+    adjacency_matrix = get_adjacency_matrix(umi_array)
+
+    # If none are neighbours, just return the length!
+    umi_neighbors = adjacency_matrix.sum(axis=1)
+    if np.all(umi_neighbors==0): # They are all different!
+        return len(umi_array)
+
+    elif sum(umi_neighbors > 0)==2: #Only 2 connect UMIs, so only solution would be to collapse these.
+        return len(umi_array) - 1
+
+    else: # More complicated, many alternatives for the remaining UMIs.
+        umi_count = sum(umi_neighbors==0) # These are our base disconnected set.
+
+        # Now we can use a depth first search to get the dis-connected components.
+        remaining_umi_indices = np.where( umi_neighbors>0 )[0]
+        n_connected_sets = 0 # Number of iterations indicates the number of unique sets of connected UMIs.
+        while len(remaining_umi_indices) > 0: # While there are remaining indices
+
+            connected_umi_indices = [remaining_umi_indices[0]]
+            depth_first_search(remaining_umi_indices[0], connected_umi_indices, adjacency_matrix)
+
+            n_connected_sets += 1
+
+            # Implemented this way to prevent typechange errors with numba.
+            keep_indices = np.array([index_ for index_ in range(len(remaining_umi_indices))
+                                     if remaining_umi_indices[index_] not in connected_umi_indices], dtype=np.int64)
+            remaining_umi_indices = remaining_umi_indices[keep_indices]
+
+        # umi_count is all of the indices with no neighbours, while n_connected_sets is the set of connected umis
+        # that are NOT connected to each other, so they are called as PCR duplicates.
+        return umi_count + n_connected_sets
+
+@jit(nopython=True)
+def get_adjacency_matrix(umi_array):
+    """Gets adjacency matrix between the UMIs, filled with 1 if the UMIs are within 1 edit distance from each other.
+    """
+    adjacency_matrix = np.zeros((len(umi_array), len(umi_array)), dtype=np.int64)
+
+    for umi_i in range(len(umi_array)):
+
+        umi_1 = umi_array[umi_i]
+
+        for umi_j in range(umi_i + 1, len(umi_array)):
+            umi_2 = umi_array[umi_j]
+
+            adjacency_matrix[umi_i, umi_j] = within_single_mismatch_int(umi_1, umi_2)
+            adjacency_matrix[umi_j, umi_i] = adjacency_matrix[umi_i, umi_j]  # Make it square matrix.
+
+    return adjacency_matrix
+
+@jit(nopython=True)
+def within_single_mismatch_int(seq1, seq2):
+    diff_score = 0
+    #for i1, i2 in zip(seq1, seq2):
+    for i_ in range(len(seq1)):
+        i1, i2 = seq1[i_], seq2[i_]
+
+        if i1 != i2:
+            if diff_score > 0:
+                return 0
+            diff_score += 1
+    return 1
+
+@jit(nopython=True)
+def depth_first_search(current_index, current_connected_indices, adjacency_matrix):
+    """Adds all indexes to current_connected_indices from the inputted current_index"""
+
+    neighbour_indices = np.where(adjacency_matrix[current_index, :] > 0)[0]
+    for neighbour_index in neighbour_indices:
+        if neighbour_index not in current_connected_indices:
+            # Add it to the set of connections, then perform depth-search on this neighbour.
+            current_connected_indices.append( neighbour_index )
+            depth_first_search(neighbour_index, current_connected_indices, adjacency_matrix)
+        else:
+            continue # Continue to other neighbours, this one already accounted for.
+
+def cell_umi_counts_original(cell_bc_to_umis, cell_barcodes_dict):
+    """Counts the cell UMIs using the original and SLOW method"""
+    cell_umi_counts = np.zeros((len(cell_barcodes_dict)), dtype=np.uint16)
+    for cell_barcode in cell_bc_to_umis:
+
+        cell_index = cell_barcodes_dict[cell_barcode]
 
         umi_set = cell_bc_to_umis[cell_barcode]
 
@@ -64,59 +204,166 @@ def get_cell_counts_from_umi_dict(cell_bc_to_umis, cell_barcodes_dict):
             cell_umi_counts[cell_index] += 1
         elif num_unique_umi == 2:
             umi_1, umi_2 = umi_set
-            
+
             if within_single_mismatch(umi_1, umi_2):
                 cell_umi_counts[cell_index] += 1
             else:
                 cell_umi_counts[cell_index] += 2
         else:
 
-            # Kinda complex, fix if it becomes an issue later
-            umis_to_match_umis = {umi: {umi} for umi in umi_set}
-            
-            for umi_1, umi_2 in itertools.combinations(umi_set, 2):
+            unique_umi_sets = deduplicate_umis(umi_set)
 
-                if within_single_mismatch(umi_1, umi_2):
-                    umis_to_match_umis[umi_1] = umis_to_match_umis[umi_1].union(umis_to_match_umis[umi_2])
-                    umis_to_match_umis[umi_2] = umis_to_match_umis[umi_2].union(umis_to_match_umis[umi_1])
-
-                    # syncing!
-                    # Need to also pull in the umis with edit distance 1 that are also edit distance 1 from
-                    # this umi!
-                    for umi in umis_to_match_umis[umi_1]:
-                        umis_to_match_umis[umi_1] = umis_to_match_umis[umi_1].union(umis_to_match_umis[umi])
-                        umis_to_match_umis[umi_2] = umis_to_match_umis[umi_2].union(umis_to_match_umis[umi])
-
-                    # Now need to update all the other umis with these umis edit dist 1
-                    for umi in umis_to_match_umis[umi_1]:
-                        umis_to_match_umis[umi] = umis_to_match_umis[umi].union(umis_to_match_umis[umi_1])
-
-            unique_umi_sets = []
-            for umi_set_ in umis_to_match_umis.values():
-                if umi_set_ not in unique_umi_sets:
-                    unique_umi_sets.append(umi_set_)
-            
             cell_umi_counts[cell_index] += len(unique_umi_sets)
 
     return cell_umi_counts
 
-def bam_count_gene_umis(bam_file, cell_barcodes_dict, gene_names, allt7_reads=None,
-                        max_reads=None, # Just for testing purposes...
+def deduplicate_umis(umi_set):
+    """ De-duplicates the UMIs for a gene in a single cell
+    """
+    # Kinda complex, fix if it becomes an issue later
+    umis_to_match_umis = {umi: {umi} for umi in umi_set}
+
+    for umi_1, umi_2 in itertools.combinations(umi_set, 2):
+
+        if within_single_mismatch(umi_1, umi_2):
+            umis_to_match_umis[umi_1] = umis_to_match_umis[umi_1].union(umis_to_match_umis[umi_2])
+            umis_to_match_umis[umi_2] = umis_to_match_umis[umi_2].union(umis_to_match_umis[umi_1])
+
+            # syncing!
+            # Need to also pull in the umis with edit distance 1 that are also edit distance 1 from
+            # this umi!
+            for umi in umis_to_match_umis[umi_1]:
+                umis_to_match_umis[umi_1] = umis_to_match_umis[umi_1].union(umis_to_match_umis[umi])
+                umis_to_match_umis[umi_2] = umis_to_match_umis[umi_2].union(umis_to_match_umis[umi])
+
+            # Now need to update all the other umis with these umis edit dist 1
+            for umi in umis_to_match_umis[umi_1]:
+                umis_to_match_umis[umi] = umis_to_match_umis[umi].union(umis_to_match_umis[umi_1])
+
+    unique_umi_sets = []
+    for umi_set_ in umis_to_match_umis.values():
+        if umi_set_ not in unique_umi_sets:
+            unique_umi_sets.append(umi_set_)
+
+    return unique_umi_sets
+
+def within_single_mismatch(seq1, seq2):
+    diff_score = 0
+    for i1, i2 in zip(seq1, seq2):
+        if i1 != i2:
+            if diff_score > 0:
+                return False
+            diff_score+=1
+    return True
+
+# def get_cell_counts_from_umi_dict_OLD(cell_bc_to_umis, cell_barcodes_dict):
+#     """Gets the counts across cells for a given barcode to umi dict.
+#
+#     VERY slow. Needs to be optimized for run speed because right now this eats most of the processing time.
+#     """
+#     cell_umi_counts = np.zeros((len(cell_barcodes_dict)), dtype=np.uint16)
+#
+#     for cell_barcode, cell_index in cell_barcodes_dict.items():
+#
+#         umi_set = cell_bc_to_umis[cell_barcode]
+#
+#         # umi_set = set(umis) # stored as set automatically now
+#         num_unique_umi = len(umi_set)
+#
+#         if num_unique_umi == 1:
+#             cell_umi_counts[cell_index] += 1
+#         elif num_unique_umi == 2:
+#             umi_1, umi_2 = umi_set
+#
+#             if within_single_mismatch(umi_1, umi_2):
+#                 cell_umi_counts[cell_index] += 1
+#             else:
+#                 cell_umi_counts[cell_index] += 2
+#         else:
+#
+#             # Kinda complex, fix if it becomes an issue later
+#             umis_to_match_umis = {umi: {umi} for umi in umi_set}
+#
+#             for umi_1, umi_2 in itertools.combinations(umi_set, 2):
+#
+#                 if within_single_mismatch(umi_1, umi_2):
+#                     umis_to_match_umis[umi_1] = umis_to_match_umis[umi_1].union(umis_to_match_umis[umi_2])
+#                     umis_to_match_umis[umi_2] = umis_to_match_umis[umi_2].union(umis_to_match_umis[umi_1])
+#
+#                     # syncing!
+#                     # Need to also pull in the umis with edit distance 1 that are also edit distance 1 from
+#                     # this umi!
+#                     for umi in umis_to_match_umis[umi_1]:
+#                         umis_to_match_umis[umi_1] = umis_to_match_umis[umi_1].union(umis_to_match_umis[umi])
+#                         umis_to_match_umis[umi_2] = umis_to_match_umis[umi_2].union(umis_to_match_umis[umi])
+#
+#                     # Now need to update all the other umis with these umis edit dist 1
+#                     for umi in umis_to_match_umis[umi_1]:
+#                         umis_to_match_umis[umi] = umis_to_match_umis[umi].union(umis_to_match_umis[umi_1])
+#
+#             unique_umi_sets = []
+#             for umi_set_ in umis_to_match_umis.values():
+#                 if umi_set_ not in unique_umi_sets:
+#                     unique_umi_sets.append(umi_set_)
+#
+#             cell_umi_counts[cell_index] += len(unique_umi_sets)
+#
+#     return cell_umi_counts
+
+def bam_count_gene_umis(bam_file, cell_barcodes_dict, gene_names, n_cpus=1, verbose=True,
+                        ):
+    """ Count all the gene UMIs across the bam file!
+    """
+    if n_cpus == 1:
+        return bam_count_gene_umis_contig(bam_file, cell_barcodes_dict, gene_names, verbose,None)
+
+    else: #### Parallel processing
+        # Determining the contig names so can parallelize across contigs.
+        bam_ = AlignmentFile(bam_file, "rb")
+        chrom_names = [contig['SN'] for contig in bam_.header['SQ']]
+        bam_.close()
+
+        #### Processing in parallel
+        from concurrent.futures import ProcessPoolExecutor
+
+        from functools import partial
+        partial_func = partial(bam_count_gene_umis_contig, bam_file, cell_barcodes_dict, gene_names, verbose)
+
+        with ProcessPoolExecutor(max_workers=n_cpus) as executor:
+            contig_counts = list(executor.map(partial_func, chrom_names))
+
+        cell_by_gene_umi_counts = contig_counts[0].values
+        for counts_ in contig_counts[1:]:
+            cell_by_gene_umi_counts += counts_.values
+
+        cell_by_gene_umi_counts = pd.DataFrame(cell_by_gene_umi_counts,
+                                               index=contig_counts[0].index.values,
+                                               columns=contig_counts[0].columns.values)
+
+        return cell_by_gene_umi_counts
+
+def bam_count_gene_umis_contig(bam_file, cell_barcodes_dict, gene_names, verbose, contig,
                         ):
     """Get's gene UMI counts per cell, returning as pandas dataframe of counts!
     """
-    
-    # I SHOULD REWRITE THIS WHOLE THING WHEN I GET A CHANCE
-    
+
     gene_set = set(gene_names)
 
-    # genes_to_bcs_to_umis = defaultdict(dict)
+    if verbose:
+        print(f"Counting UMIs for contig: {contig}", file=sys.stdout, flush=True)
+
+    # NOT numba friendly
     genes_to_bcs_to_umis = defaultdict(lambda: defaultdict(set))
-    
+
     # If the bam has not reads for a given region, just doesn't iterate
     with AlignmentFile(bam_file, "rb") as bam:
         nreads = 0
-        for i, read in enumerate( bam ):
+        if type(contig)!=type(None):
+            iterator_ = bam.fetch(contig)
+        else:
+            iterator_ = bam
+
+        for i, read in enumerate( iterator_ ):
             nreads += 1
 
             cell_barcode = read.get_tag('CB')
@@ -136,14 +383,43 @@ def bam_count_gene_umis(bam_file, cell_barcodes_dict, gene_names, allt7_reads=No
                 continue
 
             # Should be cleaner and faster
-            genes_to_bcs_to_umis[gene_or_id][cell_barcode].add(read.get_tag('pN'))
+            genes_to_bcs_to_umis[gene_or_id][cell_barcode].add( read.get_tag('pN') )
 
+    if len(genes_to_bcs_to_umis) == 0: # No genic reads found on this contig, so just return an empty count matrix.
+
+        return pd.DataFrame(np.zeros((len(cell_barcodes_dict), len(gene_names)), dtype=np.uint16),
+                     index=list(cell_barcodes_dict.keys()),
+                     columns=list(gene_names))
+
+    # Now converting this to a more Numba friendly format
     gene_names_list = list(gene_names)
-    gene_names_dict = {key: value for value, key in enumerate(gene_names_list)}
-    cell_by_gene_umi_counts = np.zeros((len(cell_barcodes_dict), len(gene_names)), dtype=np.uint16)
-    for gene in genes_to_bcs_to_umis:
-        gene_index = gene_names_dict[gene]
-        cell_by_gene_umi_counts[:, gene_index] = get_cell_counts_from_umi_dict(genes_to_bcs_to_umis[gene], cell_barcodes_dict)
+    gene_indices = []
+    gene_cell_indices = []
+    gene_cell_umis = []
+    for genei in range(len(gene_names)):
+
+        gene_name = gene_names_list[genei]
+
+        if gene_name in genes_to_bcs_to_umis:
+            gene_indices.append(genei)
+
+            cell_barcodes = list( genes_to_bcs_to_umis[gene_name].keys() )
+
+            gene_cell_indices.append( np.array([cell_barcodes_dict[cell_barcode] for cell_barcode in cell_barcodes],
+                                                dtype=np.int64)
+                                       )
+
+            umi_len = len( list( genes_to_bcs_to_umis[gene_name][cell_barcodes[0]])[0] )
+
+            gene_cell_umis.append( List([np.array(list(genes_to_bcs_to_umis[gene_name][cell_barcode]), dtype=f"<U{umi_len}")
+                                        for cell_barcode in cell_barcodes])
+                                 )
+
+    gene_indices = np.array(gene_indices, dtype=np.int64)
+
+    # Performing the counting with Numba speed-up
+    cell_by_gene_umi_counts = get_cell_by_gene_umi_counts(len(cell_barcodes_dict), len(gene_names),
+                                                          gene_indices, gene_cell_indices, gene_cell_umis)
 
     cell_by_gene_umi_counts = pd.DataFrame(cell_by_gene_umi_counts,
                                            index=list(cell_barcodes_dict.keys()),
@@ -151,15 +427,73 @@ def bam_count_gene_umis(bam_file, cell_barcodes_dict, gene_names, allt7_reads=No
 
     return cell_by_gene_umi_counts
 
+@jit(nopython=True)
+def get_cell_by_gene_umi_counts(total_cells, total_genes, gene_indices, gene_cell_indices, gene_cell_umis):
 
-def within_single_mismatch(seq1, seq2):  
-    diff_score = 0
-    for i1, i2 in zip(seq1, seq2):
-        if i1 != i2:
-            if diff_score > 0:
-                return False
-            diff_score+=1
-    return True
+    cell_by_gene_umi_counts = np.zeros((total_cells, total_genes), dtype=np.uint16)
+    for genei in prange(len(gene_indices)):
+
+        gene_index = gene_indices[ genei ]
+
+        cell_bc_indexes = gene_cell_indices[ genei ]
+        cell_umis = gene_cell_umis[ genei ]
+
+        cell_by_gene_umi_counts[:, gene_index] = cell_umi_counts_FAST(total_cells, cell_bc_indexes, cell_umis)
+
+    return cell_by_gene_umi_counts
+
+
+# def bam_count_gene_umis_OLD(bam_file, cell_barcodes_dict, gene_names, allt7_reads=None,
+#                         max_reads=None,  # Just for testing purposes...
+#                         ):
+#     """Get's gene UMI counts per cell, returning as pandas dataframe of counts!
+#     """
+#
+#     # I SHOULD REWRITE THIS WHOLE THING WHEN I GET A CHANCE
+#
+#     gene_set = set(gene_names)
+#
+#     # genes_to_bcs_to_umis = defaultdict(dict)
+#     genes_to_bcs_to_umis = defaultdict(lambda: defaultdict(set))
+#
+#     # If the bam has not reads for a given region, just doesn't iterate
+#     with AlignmentFile(bam_file, "rb") as bam:
+#         nreads = 0
+#         for i, read in enumerate(bam):
+#             nreads += 1
+#
+#             cell_barcode = read.get_tag('CB')
+#
+#             # Using filt bam means I shouldnt have to check against allt7
+#             if (cell_barcode not in cell_barcodes_dict):
+#                 continue
+#
+#             gene_name_tag = read.get_tag('GN')
+#             gene_id_tag = read.get_tag('GX')
+#
+#             if (gene_name_tag != '') and (gene_name_tag in gene_set):
+#                 gene_or_id = gene_name_tag
+#             elif (gene_id_tag != '') and (gene_id_tag in gene_set):
+#                 gene_or_id = gene_id_tag
+#             else:
+#                 continue
+#
+#             # Should be cleaner and faster
+#             genes_to_bcs_to_umis[gene_or_id][cell_barcode].add(read.get_tag('pN'))
+#
+#     gene_names_list = list(gene_names)
+#     gene_names_dict = {key: value for value, key in enumerate(gene_names_list)}
+#     cell_by_gene_umi_counts = np.zeros((len(cell_barcodes_dict), len(gene_names)), dtype=np.uint16)
+#     for gene in genes_to_bcs_to_umis:
+#         gene_index = gene_names_dict[gene]
+#         cell_by_gene_umi_counts[:, gene_index] = get_cell_counts_from_umi_dict(genes_to_bcs_to_umis[gene],
+#                                                                                cell_barcodes_dict)
+#
+#     cell_by_gene_umi_counts = pd.DataFrame(cell_by_gene_umi_counts,
+#                                            index=list(cell_barcodes_dict.keys()),
+#                                            columns=gene_names_list)
+#
+#     return cell_by_gene_umi_counts
 
 def bio_edit_distance(seqA, seqB, start_from_first_smallest_seq_aln=True, alns_to_compare=None):
     """More biologically relevant edit distance, which does a global alignment between two strings, then takes the

@@ -13,7 +13,7 @@ setup(
     long_description_content_type="text/markdown",
     long_description=long_description,
     scripts=['bin/sheriff'],
-    install_requires = ['pandas', 'gtfparse==2.5.0', 'faiss-cpu', "numpy<2"],
+    install_requires = ['pandas', 'gtfparse==2.5.0', 'faiss-cpu==1.10.0', "numpy<2"],
     #install_requires = ['numpy','pandas'],
     #install_requires = ['pandas', 'gtfparse==2.5.0', 'faiss-cpu', "numpy<2"],
     entry_points={

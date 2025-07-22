@@ -22,7 +22,7 @@ To install from source:
 
     mamba create -n sheriff_env python=3.10
     mamba activate sheriff_env
-    mamba install conda-forge::biopython=1.81 typing_extensions typer bioconda::pyranges bioconda::pysam 
+    mamba install conda-forge::numba conda-forge::biopython=1.81 typing_extensions typer bioconda::pyranges bioconda::pysam 
 
     git clone https://github.com/BradBalderson/Sheriff.git
     cd Sheriff
