@@ -439,7 +439,7 @@ def get_nonbarcoded_edits(bam_file, canonical_to_edits, canonical_to_edited_cell
 
         edit_chr = edit_site.chrom
         edit_pos = edit_site.ref_pos
-        edit_window_start = min([edit_pos-dist, 0]) # Accounting for edge of chromosome.
+        edit_window_start = max([edit_pos-dist, 0]) # Accounting for edge of chromosome.
         edit_window_end = edit_pos+dist # pysam is OK with trying to fetch greater than chromosome length.
 
         # Getting set of cells that are called as edited for this edit site
