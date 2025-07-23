@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='Sheriff',
-    version='1.0.0',
+    version='1.1.0',
     author='Brad Balderson, Michael Lorenzini, Aaron Ho',
     author_email='bbalderson@salk.edu',
     packages=find_packages(),
