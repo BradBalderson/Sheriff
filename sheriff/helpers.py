@@ -21,6 +21,10 @@ from numba import jit
 from numba import prange
 from numba.typed import List
 
+# Important for maintaining good memory performance
+#from scipy.sparse import dok_array as sparse_array # Generalise so can test different implementations easily.
+from scipy.sparse import csr_array
+
 # Suppress only BiopythonDeprecationWarning
 warnings.simplefilter("ignore", BiopythonDeprecationWarning)
 from Bio import pairwise2  # pip install biopython
@@ -257,67 +261,20 @@ def within_single_mismatch(seq1, seq2):
             diff_score+=1
     return True
 
-# def get_cell_counts_from_umi_dict_OLD(cell_bc_to_umis, cell_barcodes_dict):
-#     """Gets the counts across cells for a given barcode to umi dict.
-#
-#     VERY slow. Needs to be optimized for run speed because right now this eats most of the processing time.
-#     """
-#     cell_umi_counts = np.zeros((len(cell_barcodes_dict)), dtype=np.uint16)
-#
-#     for cell_barcode, cell_index in cell_barcodes_dict.items():
-#
-#         umi_set = cell_bc_to_umis[cell_barcode]
-#
-#         # umi_set = set(umis) # stored as set automatically now
-#         num_unique_umi = len(umi_set)
-#
-#         if num_unique_umi == 1:
-#             cell_umi_counts[cell_index] += 1
-#         elif num_unique_umi == 2:
-#             umi_1, umi_2 = umi_set
-#
-#             if within_single_mismatch(umi_1, umi_2):
-#                 cell_umi_counts[cell_index] += 1
-#             else:
-#                 cell_umi_counts[cell_index] += 2
-#         else:
-#
-#             # Kinda complex, fix if it becomes an issue later
-#             umis_to_match_umis = {umi: {umi} for umi in umi_set}
-#
-#             for umi_1, umi_2 in itertools.combinations(umi_set, 2):
-#
-#                 if within_single_mismatch(umi_1, umi_2):
-#                     umis_to_match_umis[umi_1] = umis_to_match_umis[umi_1].union(umis_to_match_umis[umi_2])
-#                     umis_to_match_umis[umi_2] = umis_to_match_umis[umi_2].union(umis_to_match_umis[umi_1])
-#
-#                     # syncing!
-#                     # Need to also pull in the umis with edit distance 1 that are also edit distance 1 from
-#                     # this umi!
-#                     for umi in umis_to_match_umis[umi_1]:
-#                         umis_to_match_umis[umi_1] = umis_to_match_umis[umi_1].union(umis_to_match_umis[umi])
-#                         umis_to_match_umis[umi_2] = umis_to_match_umis[umi_2].union(umis_to_match_umis[umi])
-#
-#                     # Now need to update all the other umis with these umis edit dist 1
-#                     for umi in umis_to_match_umis[umi_1]:
-#                         umis_to_match_umis[umi] = umis_to_match_umis[umi].union(umis_to_match_umis[umi_1])
-#
-#             unique_umi_sets = []
-#             for umi_set_ in umis_to_match_umis.values():
-#                 if umi_set_ not in unique_umi_sets:
-#                     unique_umi_sets.append(umi_set_)
-#
-#             cell_umi_counts[cell_index] += len(unique_umi_sets)
-#
-#     return cell_umi_counts
-
 def bam_count_gene_umis(bam_file, cell_barcodes_dict, gene_names, n_cpus=1, verbose=True,
                         chunk_size_mb=15, # Measured in mb
                         ):
     """ Count all the gene UMIs across the bam file!
     """
     if n_cpus == 1:
-        return bam_count_gene_umis_contig(bam_file, cell_barcodes_dict, gene_names, verbose,None)
+        cell_by_gene_umi_counts_SPARSE = bam_count_gene_umis_contig(bam_file, cell_barcodes_dict, gene_names, verbose,
+                                                                    None)
+        # Convert from sparse format to dense for output.
+        cell_by_gene_umi_counts = pd.DataFrame(cell_by_gene_umi_counts_SPARSE.toarray(),
+                                               index=list(cell_barcodes_dict.keys()),
+                                               columns=list(gene_names))
+
+        return cell_by_gene_umi_counts
 
     else: #### Parallel processing
         # Determining the contig names so can parallelize across contigs.
@@ -352,19 +309,27 @@ def bam_count_gene_umis(bam_file, cell_barcodes_dict, gene_names, n_cpus=1, verb
         with ProcessPoolExecutor(max_workers=n_cpus) as executor:
             contig_counts = list(executor.map(partial_func, genome_chunks))
 
-        cell_by_gene_umi_counts = contig_counts[0].values
-        for counts_ in contig_counts[1:]:
-            cell_by_gene_umi_counts += counts_.values
+        # DENSE version
+        # cell_by_gene_umi_counts = contig_counts[0].values
+        # for counts_ in contig_counts[1:]:
+        #     cell_by_gene_umi_counts += counts_.values
 
-        cell_by_gene_umi_counts = pd.DataFrame(cell_by_gene_umi_counts,
-                                               index=contig_counts[0].index.values,
-                                               columns=contig_counts[0].columns.values)
+        # SPARSE version, add these together FIRST, more memory efficient.
+        cell_by_gene_umi_counts = contig_counts[0] # sparse csr array.
+        for counts_ in contig_counts[1:]:
+            cell_by_gene_umi_counts += counts_
+
+        # Now we have just one array, make it dense, and return as a dataframe.
+        cell_by_gene_umi_counts = pd.DataFrame(cell_by_gene_umi_counts.toarray(),
+                                               index=list(cell_barcodes_dict.keys()),
+                                               columns=list(gene_names))
 
         return cell_by_gene_umi_counts
 
 def bam_count_gene_umis_contig(bam_file, cell_barcodes_dict, gene_names, verbose, contig,
                         ):
-    """Get's gene UMI counts per cell, returning as pandas dataframe of counts!
+    """Get's gene UMI counts per cell, returning as sparse array of counts! Sparse is important to prevent memory issues
+    from returning a ton of cells X genes sized arrays from each thread.
     """
 
     gene_set = set(gene_names)
@@ -407,9 +372,13 @@ def bam_count_gene_umis_contig(bam_file, cell_barcodes_dict, gene_names, verbose
 
     if len(genes_to_bcs_to_umis) == 0: # No genic reads found on this contig, so just return an empty count matrix.
 
-        return pd.DataFrame(np.zeros((len(cell_barcodes_dict), len(gene_names)), dtype=np.uint16),
-                     index=list(cell_barcodes_dict.keys()),
-                     columns=list(gene_names))
+        # Sparse version
+        return csr_array((len(cell_barcodes_dict), len(gene_names)), dtype=np.uint16)
+
+        # OLD version
+        # return pd.DataFrame(np.zeros((len(cell_barcodes_dict), len(gene_names)), dtype=np.uint16),
+        #              index=list(cell_barcodes_dict.keys()),
+        #              columns=list(gene_names))
 
     # Now converting this to a more Numba friendly format
     gene_names_list = list(gene_names)
@@ -438,19 +407,35 @@ def bam_count_gene_umis_contig(bam_file, cell_barcodes_dict, gene_names, verbose
     gene_indices = np.array(gene_indices, dtype=np.int64)
 
     # Performing the counting with Numba speed-up
-    cell_by_gene_umi_counts = get_cell_by_gene_umi_counts(len(cell_barcodes_dict), len(gene_names),
-                                                          gene_indices, gene_cell_indices, gene_cell_umis)
+    cell_by_gene_umi_counts_SPARSE_indices = get_cell_by_gene_umi_counts(len(cell_barcodes_dict), #len(gene_names),
+                                                                            gene_indices, gene_cell_indices, gene_cell_umis)
 
-    cell_by_gene_umi_counts = pd.DataFrame(cell_by_gene_umi_counts,
-                                           index=list(cell_barcodes_dict.keys()),
-                                           columns=gene_names_list)
+    # Constructing the sparse array from the collated sparse indices, need to do here because sparse array unsupported in numba.
+    cell_by_gene_umi_counts_SPARSE = csr_array((cell_by_gene_umi_counts_SPARSE_indices[:, 0], # The counts
+                                                    (cell_by_gene_umi_counts_SPARSE_indices[:, 1],
+                                                      cell_by_gene_umi_counts_SPARSE_indices[:, 2])), # row, col indices
+                                                    shape=(len(cell_barcodes_dict),
+                                                           len(gene_names)), # Total shape of sparse array.
+                                                    dtype = np.uint16
+                                                )
 
-    return cell_by_gene_umi_counts
+    # cell_by_gene_umi_counts = pd.DataFrame(cell_by_gene_umi_counts,
+    #                                        index=list(cell_barcodes_dict.keys()),
+    #                                        columns=gene_names_list)
+
+    return cell_by_gene_umi_counts_SPARSE
 
 @jit(nopython=True)
-def get_cell_by_gene_umi_counts(total_cells, total_genes, gene_indices, gene_cell_indices, gene_cell_umis):
+def get_cell_by_gene_umi_counts(total_cells,
+                                gene_indices, gene_cell_indices, gene_cell_umis):
 
-    cell_by_gene_umi_counts = np.zeros((total_cells, total_genes), dtype=np.uint16)
+    # OLD dense version
+    #cell_by_gene_umi_counts = np.zeros((total_cells, total_genes), dtype=np.uint16)
+
+    # Will instead store the required Sparse format to create a sparse array:
+    row_cell_indices = []
+    col_gene_indices = []
+    counts = []
     for genei in prange(len(gene_indices)):
 
         gene_index = gene_indices[ genei ]
@@ -458,62 +443,23 @@ def get_cell_by_gene_umi_counts(total_cells, total_genes, gene_indices, gene_cel
         cell_bc_indexes = gene_cell_indices[ genei ]
         cell_umis = gene_cell_umis[ genei ]
 
-        cell_by_gene_umi_counts[:, gene_index] = cell_umi_counts_FAST(total_cells, cell_bc_indexes, cell_umis)
+        # OLD dense version
+        #cell_by_gene_umi_counts[:, gene_index] = cell_umi_counts_FAST(total_cells, cell_bc_indexes, cell_umis)
+        cell_counts = cell_umi_counts_FAST(total_cells, cell_bc_indexes, cell_umis)
+        cell_indices = np.where(cell_counts > 0)[0]
+        cell_counts = cell_counts[ cell_indices ]
 
-    return cell_by_gene_umi_counts
+        row_cell_indices.extend( list(cell_indices) )
+        col_gene_indices.extend( [gene_index]*len(cell_indices) )
+        counts.extend( list(cell_counts) )
 
+    # Outputting as a single array
+    cell_by_gene_umi_SPARSE_indices = np.zeros((len(counts), 3), dtype=np.uint16)
+    cell_by_gene_umi_SPARSE_indices[:, 0] = np.array(counts, dtype=np.uint16)
+    cell_by_gene_umi_SPARSE_indices[:, 1] = np.array(row_cell_indices, dtype=np.uint16)
+    cell_by_gene_umi_SPARSE_indices[:, 2] = np.array(col_gene_indices, dtype=np.uint16)
 
-# def bam_count_gene_umis_OLD(bam_file, cell_barcodes_dict, gene_names, allt7_reads=None,
-#                         max_reads=None,  # Just for testing purposes...
-#                         ):
-#     """Get's gene UMI counts per cell, returning as pandas dataframe of counts!
-#     """
-#
-#     # I SHOULD REWRITE THIS WHOLE THING WHEN I GET A CHANCE
-#
-#     gene_set = set(gene_names)
-#
-#     # genes_to_bcs_to_umis = defaultdict(dict)
-#     genes_to_bcs_to_umis = defaultdict(lambda: defaultdict(set))
-#
-#     # If the bam has not reads for a given region, just doesn't iterate
-#     with AlignmentFile(bam_file, "rb") as bam:
-#         nreads = 0
-#         for i, read in enumerate(bam):
-#             nreads += 1
-#
-#             cell_barcode = read.get_tag('CB')
-#
-#             # Using filt bam means I shouldnt have to check against allt7
-#             if (cell_barcode not in cell_barcodes_dict):
-#                 continue
-#
-#             gene_name_tag = read.get_tag('GN')
-#             gene_id_tag = read.get_tag('GX')
-#
-#             if (gene_name_tag != '') and (gene_name_tag in gene_set):
-#                 gene_or_id = gene_name_tag
-#             elif (gene_id_tag != '') and (gene_id_tag in gene_set):
-#                 gene_or_id = gene_id_tag
-#             else:
-#                 continue
-#
-#             # Should be cleaner and faster
-#             genes_to_bcs_to_umis[gene_or_id][cell_barcode].add(read.get_tag('pN'))
-#
-#     gene_names_list = list(gene_names)
-#     gene_names_dict = {key: value for value, key in enumerate(gene_names_list)}
-#     cell_by_gene_umi_counts = np.zeros((len(cell_barcodes_dict), len(gene_names)), dtype=np.uint16)
-#     for gene in genes_to_bcs_to_umis:
-#         gene_index = gene_names_dict[gene]
-#         cell_by_gene_umi_counts[:, gene_index] = get_cell_counts_from_umi_dict(genes_to_bcs_to_umis[gene],
-#                                                                                cell_barcodes_dict)
-#
-#     cell_by_gene_umi_counts = pd.DataFrame(cell_by_gene_umi_counts,
-#                                            index=list(cell_barcodes_dict.keys()),
-#                                            columns=gene_names_list)
-#
-#     return cell_by_gene_umi_counts
+    return cell_by_gene_umi_SPARSE_indices
 
 def bio_edit_distance(seqA, seqB, start_from_first_smallest_seq_aln=True, alns_to_compare=None):
     """More biologically relevant edit distance, which does a global alignment between two strings, then takes the

@@ -1148,7 +1148,9 @@ def run_count_t7(bam_file,
               "(via 'uncorrect_gene_count' input).",
               file=sys.stdout, flush=True) if verbosity>= 1 else None
         cell_by_gene_umi_counts_t7_confounded = bam_count_gene_umis(bam_file, cell_barcodes_dict, gene_names,
-                                                                    n_cpus=n_cpus, verbose=(verbosity >= 1))
+                                                                    n_cpus=n_cpus, verbose=(verbosity >= 1),
+                                                                    chunk_size_mb=chunk_size_mb
+                                                                    )
 
     elif uncorrected_gene_count:
         cell_by_gene_umi_counts_t7_confounded = cell_by_gene_umi_counts

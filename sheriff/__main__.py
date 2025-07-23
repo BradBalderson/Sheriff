@@ -186,10 +186,13 @@ chunk_size_mb: Annotated[
             typer.Option(
                 "--chunk",
                 "-chunk",
-                help=("Number of mega-bases to process at a time for gene UMI counting."
+                help=("Number of mega-bases to process at a time for gene UMI counting. Set this lower if get memory"
+                      "issues, currently set to > hg38 chr1 size (249 Mb), so is parallelized by chromosome."
+                      "Trade-off is can cause minor double-counting of UMIs if a genome chunk intersects a gene."
+                      "Very small / negligible difference in counts."
                       )
                 )
-            ] = 15,
+            ] = 250,
 ):
     
     # Run
