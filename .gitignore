@@ -1,3 +1,6 @@
+sheriff/__pycache__/
+subset_500_cell_sheriff_output2/
+subset_500_cell_sheriff_output3/
 .idea/
 dependency_notes.txt
 .DS_Store
