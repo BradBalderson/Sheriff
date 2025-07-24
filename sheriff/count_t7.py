@@ -1177,8 +1177,9 @@ def run_count_t7(bam_file,
         for edit_site in called_edit_sites:
 
             edit_chr = edit_site.chrom
-            edit_window_start = edit_site.ref_pos - edit_dist
-            edit_window_end = edit_site.ref_pos + edit_dist
+            edit_pos = edit_site.ref_pos
+            edit_window_start = max([edit_pos - edit_dist, 0])  # Accounting for edge of chromosome.
+            edit_window_end = edit_pos + edit_dist  # pysam is OK with trying to fetch greater than chromosome length.
 
             # This is most likely the culprit of the really long runtime
             for read in bam.fetch(edit_chr, edit_window_start, edit_window_end):
