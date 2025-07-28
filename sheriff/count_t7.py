@@ -19,8 +19,8 @@ import pysam
 from pysam.libcalignmentfile import AlignmentFile
 
 # Same directory, shouldn't need relative import. Throws error otherwise
-from .helpers import get_t7_count_matrix, get_cell_counts_from_umi_dict, bam_count_gene_umis, bio_edit_distance, \
-                    get_edit_sets, get_longest_edits, bed_file_flag_edits
+from .helpers import (get_t7_count_matrix, get_cell_counts_from_umi_dict, bam_count_gene_umis,
+                      get_longest_edits, bed_file_flag_edits)
 
 # Import of helper functions !
 # from .helpers import get_t7_count_matrix, get_cell_counts_from_umi_dict, bam_count_gene_umis, bio_edit_distance, \
@@ -439,8 +439,8 @@ def get_nonbarcoded_edits(bam_file, canonical_to_edits, canonical_to_edited_cell
 
         edit_chr = edit_site.chrom
         edit_pos = edit_site.ref_pos
-        edit_window_start = edit_pos-dist
-        edit_window_end = edit_pos+dist
+        edit_window_start = max([edit_pos-dist, 0]) # Accounting for edge of chromosome.
+        edit_window_end = edit_pos+dist # pysam is OK with trying to fetch greater than chromosome length.
 
         # Getting set of cells that are called as edited for this edit site
         edit_cells = canonical_to_edited_cells[edit_site]
@@ -513,7 +513,8 @@ def run_count_t7(bam_file,
                  mrna_count_mode = 'all', # Mode for quantifying gene expression,
                                             # 'all' is to count all reads associated with a gene,
                                             # 'polyT' is to only count polyT reads, indicating mature mRNA transcripts.
-                 outdir=None, verbosity=1,
+                 outdir=None, verbosity=1, n_cpus=1,
+                 chunk_size_mb=15, #Mb to process at a time, in parallel.
                  ):
     
     # Process output data stuff
@@ -1138,8 +1139,8 @@ def run_count_t7(bam_file,
               file=sys.stdout, flush=True) if verbosity >= 1 else None
 
     # Run using prefiltered non-t7 bam
-    cell_by_gene_umi_counts = bam_count_gene_umis(filt_bam, cell_barcodes_dict, gene_names, allt7_reads,
-                                                  max_reads=max_gene_count_reads, # Just for testing purposes...
+    cell_by_gene_umi_counts = bam_count_gene_umis(filt_bam, cell_barcodes_dict, gene_names,
+                                                    n_cpus=n_cpus, verbose=(verbosity >= 1), chunk_size_mb=chunk_size_mb,
                                  )
 
     if uncorrected_gene_count and len(allt7_reads)>0: # only makes sense if there was actual edit sites.
@@ -1147,7 +1148,9 @@ def run_count_t7(bam_file,
               "(via 'uncorrect_gene_count' input).",
               file=sys.stdout, flush=True) if verbosity>= 1 else None
         cell_by_gene_umi_counts_t7_confounded = bam_count_gene_umis(bam_file, cell_barcodes_dict, gene_names,
-                                                                    allt7_reads=None, max_reads=max_gene_count_reads)
+                                                                    n_cpus=n_cpus, verbose=(verbosity >= 1),
+                                                                    chunk_size_mb=chunk_size_mb
+                                                                    )
 
     elif uncorrected_gene_count:
         cell_by_gene_umi_counts_t7_confounded = cell_by_gene_umi_counts
@@ -1174,8 +1177,9 @@ def run_count_t7(bam_file,
         for edit_site in called_edit_sites:
 
             edit_chr = edit_site.chrom
-            edit_window_start = edit_site.ref_pos - edit_dist
-            edit_window_end = edit_site.ref_pos + edit_dist
+            edit_pos = edit_site.ref_pos
+            edit_window_start = max([edit_pos - edit_dist, 0])  # Accounting for edge of chromosome.
+            edit_window_end = edit_pos + edit_dist  # pysam is OK with trying to fetch greater than chromosome length.
 
             # This is most likely the culprit of the really long runtime
             for read in bam.fetch(edit_chr, edit_window_start, edit_window_end):

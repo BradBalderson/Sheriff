@@ -171,7 +171,28 @@ whitelist_file: Annotated[
                 help=("Verbosity levels. 0 errors only, 1 prints processing progress, 2 prints debugging information."
                       )
                 )
-            ] = 1
+            ] = 1,
+    n_cpus: Annotated[
+            Optional[int],
+            typer.Option(
+                "--cpu",
+                "-cpu",
+                help=("Number of CPUs to use for processing, necessary to increase this for fast UMI counting."
+                      )
+                )
+            ] = 1,
+chunk_size_mb: Annotated[
+            Optional[int],
+            typer.Option(
+                "--chunk",
+                "-chunk",
+                help=("Number of mega-bases to process at a time for gene UMI counting. Set this lower if get memory"
+                      "issues, currently set to > hg38 chr1 size (249 Mb), so is parallelized by chromosome."
+                      "Trade-off is can cause minor double-counting of UMIs if a genome chunk intersects a gene."
+                      "Very small / negligible difference in counts."
+                      )
+                )
+            ] = 250,
 ):
     
     # Run
@@ -199,6 +220,8 @@ whitelist_file: Annotated[
                  uncorrected_gene_count=False, # For testing
                  constrain_allele_calls=False,
                  verbosity=verbosity,
+                 n_cpus=n_cpus,
+                 chunk_size_mb=chunk_size_mb,
                  )
 
 def main():

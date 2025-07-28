@@ -22,11 +22,16 @@ To install from source:
 
     mamba create -n sheriff_env python=3.10
     mamba activate sheriff_env
-    mamba install conda-forge::biopython=1.81 typing_extensions typer bioconda::pyranges bioconda::pysam 
+    mamba install conda-forge::scipy conda-forge::numpy==1.26.4 bioconda::gtfparse conda-forge::faiss-cpu conda-forge::numba conda-forge::biopython=1.81 typing_extensions typer bioconda::pyranges bioconda::pysam 
 
     git clone https://github.com/BradBalderson/Sheriff.git
     cd Sheriff
     pip install .
+
+    # ensure zlib is found, can be an issue on some machines.
+    export LDFLAGS="-L$CONDA_PREFIX/lib"
+    export CPPFLAGS="-I$CONDA_PREFIX/include"
+    export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
 
 Usage
 -----
@@ -73,6 +78,12 @@ Usage
     │ --out,--outdir,--out_dir                              -o                                           TEXT     Write output files to this location. Defaults to Current Working Directory [default: None]             │
     │ --v,--verbosity                                       -v,-verbosity                                INTEGER  Verbosity levels. 0 errors only, 1 prints processing progress, 2 prints debugging information.         │
     │                                                                                                             [default: 1]                                                                                           │
+    │ --cpu                                                 -cpu                                         INTEGER  Number of CPUs to use for processing, necessary to increase this for fast UMI counting. [default: 1]   │
+    │ --chunk                                               -chunk                                       INTEGER  Number of mega-bases to process at a time for gene UMI counting. Set this lower if get memoryissues,   │
+    │                                                                                                             currently set to > hg38 chr1 size (249 Mb), so is parallelized by chromosome.Trade-off is can cause    │
+    │                                                                                                             minor double-counting of UMIs if a genome chunk intersects a gene.Very small / negligible difference   │
+    │                                                                                                             in counts.                                                                                             │
+    │                                                                                                             [default: 250]                                                                                         │
     │ --install-completion                                                                                        Install completion for the current shell.                                                              │
     │ --show-completion                                                                                           Show completion for the current shell, to copy it or customize the installation.                       │
     │ --help                                                                                                      Show this message and exit.                                                                            │
@@ -118,9 +129,10 @@ Expected run time for this demo is <30 seconds.
     blacklist_="${dir_}black_100x_peaks_by_qval.simple_repeats_50N.EXTRA.bed"
     blacklist_seqs="${dir_}blacklist_seqs.txt"
     min_="1" 
-    out_dir="./subset_500_cell_sheriff_output/"
+    cpu="1"
+    out_dir="./subset_500_cell_sheriff_output2/"
 
-    sheriff ${bam_} ${ref_} ${cells_} ${gtf_} --cnv_file ${cnv_} --blacklist_file ${blacklist_} --blacklist_seqs ${blacklist_seqs} --edit_site_min_cells ${min_} -o ${out_dir} 
+    sheriff ${bam_} ${ref_} ${cells_} ${gtf_} -cpu ${cpu} --cnv_file ${cnv_} --blacklist_file ${blacklist_} --blacklist_seqs ${blacklist_seqs} --edit_site_min_cells ${min_} -o ${out_dir} 
 
 Output
 ------
