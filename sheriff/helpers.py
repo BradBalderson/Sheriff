@@ -674,6 +674,10 @@ def get_longest_edits(edit_set):
     """This method tries to get the longest t7 edits that are distinct from one another, overcomes subsequence problem
         of previous method.
     """
+    # This ensures the inputted edit_set has a deterministic order, so between runs there is not a difference in the
+    # outputs.
+    edit_set = sorted(edit_set, key=lambda e: (len(e.alt_seq), len(e.kmer_matches), e.ref_pos, id(e)))
+
     # In this version, just for looking
     edits_to_subedits = {edit: set() for edit in edit_set}  # initialise with list
 
@@ -831,9 +835,14 @@ def get_longest_edits(edit_set):
                     longest_edits.append( long_edit )
 
     # The surviving longest edits did not have a match with a longer t7 insert, so they are the set of unique edit sites
-    longest_edits = list( set(longest_edits) )
+    seen = set()
+    deduped_longest_edits = []
+    for e in longest_edits:
+        if e not in seen:
+            seen.add(e)
+            deduped_longest_edits.append(e)
 
-    return longest_edits
+    return deduped_longest_edits
 
 def bed_file_flag_edits(bed_file, canonical_edit_sites, keep_sites, whitelist,
                           edit_dist, # Extra error around the edit site specification to allow for overlap with the bed regions

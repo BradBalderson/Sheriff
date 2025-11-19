@@ -221,7 +221,10 @@ Contact:  bbalderson@salk.edu
 Change log
 -------
 
-    * v1.0.0 Initial version used for manuscript that was uploaded to bioarchive.
-    * v1.1.0 Run-speed optimized and parallelisation for gene counting.
-    * v1.1.1 Minor-change in the gene-counting logic, to account for different split-pipe version outputs.
+    * v1.1.4 Fixed slight non-determinism in the outputted dosages, due to set usage causing random ordering in get_longest_edits function.
     * v1.1.3 Fixed UMI counting bugs, that were introduced during the run-speed optimization of v1.1.0.
+    * v1.1.1 Minor-change in the gene-counting logic, to account for different split-pipe version outputs.
+    * v1.1.0 Run-speed optimized and parallelisation for gene counting.
+    * v1.0.0 Initial version used for manuscript that was uploaded to bioarchive.
+    
+    
